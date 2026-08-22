@@ -1,0 +1,148 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background: #f2ede4;
+}
+
+#app {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+#stats {
+  display: flex;
+  gap: 1rem;
+}
+
+.stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #ddd6c8;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  width: 50%;
+  transition: width 0.4s ease, background-color 0.4s ease;
+  background: #7cb342;
+}
+
+.fill.warn {
+  background: #f4a638;
+}
+
+.fill.bad {
+  background: #e15b5b;
+}
+
+#scene {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #cfe8d8 0%, #cfe8d8 60%, #d9c9a3 60%, #d9c9a3 100%);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+#cat {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 2.75rem;
+  cursor: grab;
+  transition: filter 0.3s ease, opacity 0.3s ease;
+  filter: grayscale(0.15);
+}
+
+#cat.asleep {
+  opacity: 0.75;
+}
+
+#cat.dragging {
+  cursor: grabbing;
+}
+
+#cat.stirring {
+  animation: wiggle 0.4s ease;
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(-50%, -50%) rotate(-8deg); }
+  75% { transform: translate(-50%, -50%) rotate(8deg); }
+}
+
+.bubble {
+  position: absolute;
+  transform: translate(-50%, -160%);
+  background: white;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.bubble.hidden {
+  display: none;
+}
+
+.food {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 2rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+.food.dragging {
+  cursor: grabbing;
+}
+
+#tray {
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem;
+  border: 2px dashed #ccc;
+  border-radius: 12px;
+}
+
+#food-source {
+  font-size: 2.25rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+#food-source.dragging {
+  opacity: 0.4;
+}
+
+#status {
+  min-height: 1.2em;
+  text-align: center;
+  color: #666;
+  font-size: 0.85rem;
+}

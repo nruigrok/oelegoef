@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Toby</title>
+  </head>
+  <body>
+    <div id="app">
+      <header id="stats">
+        <div class="stat">
+          <label>Hunger</label>
+          <div class="bar"><div id="hunger-fill" class="fill"></div></div>
+        </div>
+        <div class="stat">
+          <label>Weight</label>
+          <div class="bar"><div id="weight-fill" class="fill"></div></div>
+        </div>
+      </header>
+
+      <div id="scene">
+        <div id="cat" title="Tap to wake him">🐱</div>
+        <div id="meow-bubble" class="bubble hidden">meow!</div>
+      </div>
+
+      <div id="tray">
+        <div id="food-source" title="Drag the chicken to feed Toby">🍗</div>
+      </div>
+
+      <p id="status"></p>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

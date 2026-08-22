@@ -136,6 +136,12 @@ dist/
 tmp/
 temp/
 
+### Toby server ###
+server/*.db
+server/*.db-journal
+server/*.db-wal
+server/*.db-shm
+
 ### Vuejs ###
 # Recommended template: Node.gitignore
 
