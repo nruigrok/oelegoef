@@ -105,6 +105,12 @@ body {
   transition: left 0.3s ease-out, top 0.3s ease-out;
 }
 
+/* Used while a wander sequence's walk cycle is looping (see WALK_GLIDE_MS in main.ts)
+   — a longer, steadier glide than the drag-drop snap #cat.settling gives. */
+#cat.walking-glide {
+  transition: left 1.6s linear, top 1.6s linear;
+}
+
 #cat.flipped {
   transform: translate(-50%, -50%) scaleX(-1);
 }
@@ -139,6 +145,28 @@ body {
 }
 
 .thought-bubble.hidden {
+  display: none;
+}
+
+/* Sits over the scale's built-in LED readout in the background art (see design.md §6)
+   — shown only while the cat is actually on the scales spot. */
+.weight-readout {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: rgba(10, 12, 10, 0.85);
+  color: #a9f5b5;
+  font-family: "Courier New", monospace;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 4;
+}
+
+.weight-readout.hidden {
   display: none;
 }
 

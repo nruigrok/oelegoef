@@ -21,7 +21,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  getState: () => request<GameState>("/api/state"),
+  // `fresh` should only be true for a brand-new page load — it lets the server roll a
+  // chance the cat's wandered to a new spot while nobody was watching (see design.md
+  // §4). Never pass it for a poll against a tab that's already open.
+  getState: (fresh = false) => request<GameState>(fresh ? "/api/state?fresh=true" : "/api/state"),
 
   moveCat: (spotId: string) =>
     request<GameState>("/api/move-cat", {

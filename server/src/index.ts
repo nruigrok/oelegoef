@@ -10,8 +10,8 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 const app = express();
 app.use(express.json());
 
-app.get("/api/state", (_req, res) => {
-  res.json(getDecayedState());
+app.get("/api/state", (req, res) => {
+  res.json(getDecayedState({ allowWander: req.query.fresh === "true" }));
 });
 
 app.post("/api/move-cat", (req, res) => {

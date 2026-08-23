@@ -1,6 +1,6 @@
 import "./style.css";
 import { api, type GameState, type FoodLevel } from "./api.ts";
-import { getSpot, nearestSpot } from "./spots.ts";
+import { getSpot, nearestSpot, WANDERABLE_SPOTS } from "./spots.ts";
 import catLyingdownSrc from "./assets/cat/lyingdown-southeast.png";
 import catAsleepSrc from "./assets/cat/asleep-southeast.png";
 import catDraggedSrc from "./assets/cat/dragged-southeast.png";
@@ -18,6 +18,12 @@ import situpGif from "./assets/cat/situp-southeast.gif";
 import liedownGif from "./assets/cat/liedown-southeast.gif";
 import eatGif from "./assets/cat/eat-southeast.gif";
 import nopeGif from "./assets/cat/nope-southeast.gif";
+import startWalkingGif from "./assets/cat/startwalking-southeast.gif";
+import stopWalkingGif from "./assets/cat/stopwalking-southeast.gif";
+import walkingEastGif from "./assets/cat/walking-southeast.gif";
+import turningGif from "./assets/cat/turning-southeast.gif";
+import stopTurningGif from "./assets/cat/stopturning-southeast.gif";
+import walkingWestGif from "./assets/cat/walking-southwest.gif";
 import bowlFullSrc from "./assets/objects/bowl_full.png";
 import bowlHalfSrc from "./assets/objects/bowl_half.png";
 import bowlAlmostEmptySrc from "./assets/objects/bowl_almostempty.png";
@@ -38,6 +44,8 @@ for (const src of [
   catLyingdownSrc, catAsleepSrc, catDraggedSrc, catSittingSrc,
   pickedUpGif, releasedGif, startledGif, driftOffGif,
   situpGif, liedownGif, eatGif, nopeGif,
+  startWalkingGif, stopWalkingGif, walkingEastGif,
+  turningGif, stopTurningGif, walkingWestGif,
   bowlFullSrc, bowlHalfSrc, bowlAlmostEmptySrc, bowlEmptySrc,
 ]) {
   new Image().src = src;
@@ -61,6 +69,33 @@ const EAT_LOOP_MS = 1800; // eat-southeast.gif: 9 frames @ 200ms, loops forever 
 const EAT_REPEAT_COUNT = 3;
 const EAT_DURATION_MS = EAT_LOOP_MS * EAT_REPEAT_COUNT;
 const NOPE_DURATION_MS = 3400; // nope-southeast.gif: 17 frames @ 200ms
+const START_WALKING_DURATION_MS = 1800; // startwalking-southeast.gif: 9 frames @ 200ms
+const TURNING_DURATION_MS = 1700; // turning-southeast.gif: 17 frames @ 100ms (2x walking speed)
+// walking-southeast.gif and walking-southwest.gif: 8 frames @ 200ms each, loop forever
+// on their own (like eat-southeast.gif) — WALK_GLIDE_MS cuts away after exactly one
+// loop, timed to land on a clean frame boundary rather than freezing mid-stride.
+const WALK_GLIDE_MS = 1600;
+
+// Ambient behavior tick — see startAmbientBehavior(). Chances below are per-tick.
+const AMBIENT_TICK_MS = 4000;
+// Cosmetic-only twitch while asleep — doesn't wake him.
+const STIR_BASE_CHANCE = 0.05;
+const STIR_HUNGER_WEIGHT = 0.25;
+// Waking up on his own, straight into LYINGDOWN (silently — no meow/thought, unlike a
+// poke) — followed by the usual notice-food check, so a hungry-enough cat left alone
+// long enough will get up and find the bowl himself. Rolled before STIR so the two
+// don't fire on the same tick.
+const SELF_WAKE_BASE_CHANCE = 0.01;
+const SELF_WAKE_HUNGER_WEIGHT = 0.05;
+// A purr or meow to himself while resting awake (LYINGDOWN/SITTING, not mid-transition)
+// — flavor only, doesn't affect any stat.
+const AMBIENT_SOUND_CHANCE = 0.04;
+// Chance a poke that isn't otherwise about food (see tryPokeToEat) instead makes him
+// get up and relocate to a different spot — see showWanderTransition().
+const WANDER_ON_POKE_CHANCE = 0.33;
+// Chance a hungry-enough cat waking up with food elsewhere goes and finds it instead
+// of just settling — see tryWanderTowardFood().
+const WANDER_TO_FOOD_CHANCE = 0.4;
 
 // Hunger tiers driving eating behavior — see design.md §3/§4. Boundaries match the
 // hunger-bar warn/bad colors in renderStats() so the bar always reflects the tier.
@@ -69,6 +104,35 @@ const VERY_HUNGRY_THRESHOLD = 70;
 const NOT_HUNGRY_THRESHOLD = 15;
 
 type HungerTier = "veryHungry" | "hungry" | "notVeryHungry" | "notHungry";
+
+// Where the scale's built-in LED readout sits in the background art (assets_raw/objects/
+// background.png) — separate from the "scales" spot's own coordinate (where the cat
+// himself lands, on the plate just above this).
+const SCALE_READOUT_X_PERCENT = 14.2;
+const SCALE_READOUT_Y_PERCENT = 96.6;
+// The 0-100 weight stat displayed as a plausible cat weight range rather than a raw
+// percentage — see design.md §3/§6.
+const SCALE_KG_MIN = 2;
+const SCALE_KG_MAX = 5;
+const SCALES_SPOT_ID = "scales";
+// How long the readout (and the verdict thought bubble) stays up once he's weighed,
+// regardless of whether he's already wandered off — long enough to actually read it.
+const SCALE_READOUT_HOLD_MS = 5000;
+// Beat between settling on the scale and heading off on his own — see settleIntoLyingDown().
+const SCALE_WANDER_DELAY_MS = 1000;
+
+function weightToKg(weight: number): number {
+  return SCALE_KG_MIN + (weight / 100) * (SCALE_KG_MAX - SCALE_KG_MIN);
+}
+
+/** Flavor verdict on the reading, per the kg thresholds design.md §6 pins down. */
+function weightVerdict(weight: number): string {
+  const kg = weightToKg(weight);
+  if (kg < 3) return "Help, hij kwijt weg!";
+  if (kg < 4) return "Hmm, daar kan nog wel meer kip bij";
+  if (kg < 4.5) return "Kijk hem toch blij zijn";
+  return "Zo, dat is best veel kat";
+}
 
 function hungerTier(hunger: number): HungerTier {
   if (hunger > VERY_HUNGRY_THRESHOLD) return "veryHungry";
@@ -85,6 +149,7 @@ const trayEl = document.querySelector<HTMLDivElement>("#tray")!;
 const hungerFillEl = document.querySelector<HTMLDivElement>("#hunger-fill")!;
 const weightFillEl = document.querySelector<HTMLDivElement>("#weight-fill")!;
 const statusEl = document.querySelector<HTMLParagraphElement>("#status")!;
+const weightReadoutEl = document.querySelector<HTMLDivElement>("#weight-readout")!;
 const muteToggleEl = document.querySelector<HTMLButtonElement>("#mute-toggle")!;
 
 let state: GameState | null = null;
@@ -96,6 +161,7 @@ let transitionTimer: ReturnType<typeof setTimeout> | undefined;
 let settleTimer: ReturnType<typeof setTimeout> | undefined;
 let thoughtTimer: ReturnType<typeof setTimeout> | undefined;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
+let weightReadoutHideTimer: ReturnType<typeof setTimeout> | undefined;
 let purrLoopAudio: HTMLAudioElement | null = null;
 // True from the moment any one-shot cat transition/sequence starts until it settles
 // into a stable pose (asleep/lying down/sitting) — gates new taps/drags on the cat so
@@ -377,7 +443,7 @@ function showNopeTransition() {
   catEl.style.backgroundImage = `url(${nopeGif})`;
   resetPoseClasses();
   showThought("He bah, weer kip");
-  transitionTimer = setTimeout(showSitting, NOPE_DURATION_MS);
+  transitionTimer = setTimeout(settleOrWander, NOPE_DURATION_MS);
 }
 
 /**
@@ -410,7 +476,7 @@ async function eatFood() {
     void eatFood();
     return;
   }
-  showSitting();
+  settleOrWander();
 }
 
 /** Checks whether an awake cat is sitting next to a non-empty bowl, and if so, has him notice it. */
@@ -424,10 +490,26 @@ function checkForFood() {
   }
 }
 
-/** Where a cat lands after being set down or startled awake — resting, then checking for food. */
+/** Where a cat lands after being set down or startled awake — resting, then either
+ * weighing in (if he's on the scale), heading for food elsewhere (tryWanderTowardFood),
+ * or checking for food right here. */
 function settleIntoLyingDown() {
   showLyingDown();
-  checkForFood();
+  if (state?.catSpot === SCALES_SPOT_ID) {
+    handleWeighIn();
+  } else if (!tryWanderTowardFood()) {
+    checkForFood();
+  }
+}
+
+/**
+ * He's just settled on the scale: react to the reading with a verdict thought bubble,
+ * then head off on his own after a beat — he never lingers on the scale (design.md §6).
+ */
+function handleWeighIn() {
+  showThought(weightVerdict(state?.weight ?? 0), SCALE_READOUT_HOLD_MS);
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => showWanderTransition(), SCALE_WANDER_DELAY_MS);
 }
 
 /**
@@ -446,12 +528,107 @@ function tryPokeToEat(): boolean {
   return true;
 }
 
+/**
+ * Sits up, then relocates to a different spot instead of settling back down in place —
+ * a random one by default, or `targetSpotId` if given (used to send him straight to
+ * food he's just noticed elsewhere — see tryWanderTowardFood()). See design.md §4.
+ */
+function showWanderTransition(targetSpotId?: string) {
+  catGeneration++;
+  animating = true;
+  clearTimeout(transitionTimer);
+  clearTimeout(settleTimer);
+  catEl.style.backgroundImage = `url(${situpGif})`;
+  resetPoseClasses();
+  transitionTimer = setTimeout(() => wanderToNewSpot(targetSpotId), SITUP_DURATION_MS);
+}
+
+/**
+ * Plays the lead-in (facing the direction of travel) then loops the matching walk
+ * cycle while gliding to the new spot, joined with the persisting network call the
+ * same way eatFood() joins its animation with api.feed() — whichever finishes last,
+ * both are done before he settles. See design.md §4.
+ */
+async function wanderToNewSpot(targetSpotId?: string) {
+  const fromSpot = state?.catSpot;
+  if (!fromSpot) {
+    showSitting();
+    return;
+  }
+  let spotId = targetSpotId;
+  if (!spotId) {
+    const destinations = WANDERABLE_SPOTS.map((s) => s.id).filter((id) => id !== fromSpot);
+    if (destinations.length === 0) {
+      showSitting();
+      return;
+    }
+    spotId = destinations[Math.floor(Math.random() * destinations.length)];
+  }
+  const goingEast = getSpot(spotId).xPercent >= getSpot(fromSpot).xPercent;
+
+  const myGeneration = catGeneration;
+
+  catEl.style.backgroundImage = `url(${goingEast ? startWalkingGif : turningGif})`;
+  await delay(goingEast ? START_WALKING_DURATION_MS : TURNING_DURATION_MS);
+  if (myGeneration !== catGeneration) return;
+
+  catEl.classList.add("walking-glide");
+  catEl.style.backgroundImage = `url(${goingEast ? walkingEastGif : walkingWestGif})`;
+  positionAtSpot(catEl, spotId);
+  const [result] = await Promise.all([api.moveCat(spotId), delay(WALK_GLIDE_MS)]);
+  if (myGeneration !== catGeneration) return;
+  applyServerState(result);
+
+  // Reversed lead-in clips (see assets_raw/reverse_gif.py) — settles him back down
+  // the same way he got going, rather than cutting straight to the static pose.
+  catEl.style.backgroundImage = `url(${goingEast ? stopWalkingGif : stopTurningGif})`;
+  await delay(goingEast ? START_WALKING_DURATION_MS : TURNING_DURATION_MS);
+  if (myGeneration !== catGeneration) return;
+
+  showSitting();
+  checkForFood();
+}
+
+/** A chance to send him wandering to a random spot instead — used after a poke that
+ * isn't about food (see tryPokeToEat; a poke while `SITTING` finally does something,
+ * design.md §4 used to note it didn't) and after he settles from eating or declining
+ * food (see settleOrWander()). */
+function tryWander(): boolean {
+  if (Math.random() >= WANDER_ON_POKE_CHANCE) return false;
+  showWanderTransition();
+  return true;
+}
+
+/** After settling from eating or declining food, the same chance that sends a poke
+ * wandering can just as easily send him off on his own. See design.md §4/§5. */
+function settleOrWander() {
+  if (!tryWander()) showSitting();
+}
+
+/**
+ * On waking, food waiting at a different spot isn't walked to automatically — but a
+ * hungry-enough cat (the same tiers that'd self-feed if it were already at his spot,
+ * per selfFeedsAtTier) has a chance to go find it instead of just settling in place.
+ * See design.md §4.
+ */
+function tryWanderTowardFood(): boolean {
+  const s = state;
+  if (!s || s.foodSpot === null || s.foodSpot === s.catSpot || s.foodLevel === "empty") return false;
+  // He never walks onto the scales on his own, even chasing food someone left there —
+  // see design.md §6.
+  if (!WANDERABLE_SPOTS.some((spot) => spot.id === s.foodSpot)) return false;
+  if (!selfFeedsAtTier(hungerTier(s.hunger))) return false;
+  if (Math.random() >= WANDER_TO_FOOD_CHANCE) return false;
+  showWanderTransition(s.foodSpot);
+  return true;
+}
+
 function handleCatTap() {
   if (catEl.classList.contains("asleep")) {
     showThought("He, wat? Waar ben ik? Wie ben jij?");
     playMeow();
     showStartledTransition();
-  } else if (!tryPokeToEat() && !catEl.classList.contains("sitting")) {
+  } else if (!tryPokeToEat() && !tryWander() && !catEl.classList.contains("sitting")) {
     showSitUpTransition();
   }
 }
@@ -468,6 +645,27 @@ function renderStats(s: GameState) {
 
 function renderCat(s: GameState) {
   positionAtSpot(catEl, s.catSpot);
+}
+
+/**
+ * Shows Toby's current weight over the scale's LED readout while he's on it, and keeps
+ * it up for a bit after he's wandered off (see handleWeighIn()) so there's time to
+ * actually read it — see design.md §6.
+ */
+function renderWeightReadout(s: GameState) {
+  if (s.catSpot === SCALES_SPOT_ID) {
+    clearTimeout(weightReadoutHideTimer);
+    weightReadoutHideTimer = undefined;
+    weightReadoutEl.classList.remove("hidden");
+    weightReadoutEl.textContent = `${weightToKg(s.weight).toFixed(2)} kg`;
+    return;
+  }
+  if (!weightReadoutEl.classList.contains("hidden") && weightReadoutHideTimer === undefined) {
+    weightReadoutHideTimer = setTimeout(() => {
+      weightReadoutEl.classList.add("hidden");
+      weightReadoutHideTimer = undefined;
+    }, SCALE_READOUT_HOLD_MS);
+  }
 }
 
 function renderFood(s: GameState) {
@@ -502,6 +700,7 @@ function applyServerState(s: GameState) {
   renderCat(s);
   renderFood(s);
   renderStats(s);
+  renderWeightReadout(s);
 }
 
 async function moveCat(spotId: string) {
@@ -676,16 +875,40 @@ function attachTraySource(el: HTMLElement) {
   });
 }
 
-function startStirring() {
+/**
+ * Runs the cat's unprompted idle behavior on one shared tick — self-directed waking
+ * and cosmetic stirring while asleep, and an occasional purr/meow while resting awake.
+ * See design.md §4.
+ */
+function startAmbientBehavior() {
   setInterval(() => {
-    if (dragging || !state || !catEl.classList.contains("asleep")) return;
-    const chance = 0.05 + (state.hunger / 100) * 0.25;
-    if (Math.random() < chance) {
-      catEl.classList.add("stirring");
-      showThought("Zzz...");
-      setTimeout(() => catEl.classList.remove("stirring"), 400);
+    if (dragging || !state || animating) return;
+
+    if (catEl.classList.contains("asleep")) {
+      const wakeChance = SELF_WAKE_BASE_CHANCE + (state.hunger / 100) * SELF_WAKE_HUNGER_WEIGHT;
+      if (Math.random() < wakeChance) {
+        showStartledTransition();
+        return;
+      }
+      const stirChance = STIR_BASE_CHANCE + (state.hunger / 100) * STIR_HUNGER_WEIGHT;
+      if (Math.random() < stirChance) {
+        catEl.classList.add("stirring");
+        showThought("Zzz...");
+        setTimeout(() => catEl.classList.remove("stirring"), 400);
+      }
+      return;
     }
-  }, 4000);
+
+    if (Math.random() < AMBIENT_SOUND_CHANCE) {
+      if (Math.random() < 0.5) {
+        playSound(purrSound);
+        showThought("Prrrrrr");
+      } else {
+        playMeow();
+        showThought("Meow.");
+      }
+    }
+  }, AMBIENT_TICK_MS);
 }
 
 function startPeriodicSync() {
@@ -719,6 +942,7 @@ window.tobyDebug = {
 };
 
 async function init() {
+  positionAt(weightReadoutEl, SCALE_READOUT_X_PERCENT, SCALE_READOUT_Y_PERCENT);
   traySourceEl.style.backgroundImage = `url(${bowlFullSrc})`;
   attachSceneDrag(
     catEl,
@@ -735,10 +959,10 @@ async function init() {
   muteToggleEl.addEventListener("click", toggleMute);
   renderMuteButton();
 
-  applyServerState(await api.getState());
+  applyServerState(await api.getState(true));
   showAsleep();
 
-  startStirring();
+  startAmbientBehavior();
   startPeriodicSync();
 }
 

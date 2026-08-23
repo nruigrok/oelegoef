@@ -76,18 +76,22 @@ transition animations, arranged as a hierarchy from deepest sleep to most alert:
 transient — each auto-settles one level down after a hold timer, so nothing except
 active player attention keeps him more awake than `ASLEEP`.
 
-- **ASLEEP** (~99% of the time): stationary, deep sleep. Occasionally twitches on a
-  random timer weighted so a hungrier cat stirs more, purely cosmetic (a built-in,
-  in-game "he wants food" cue — see §7 on why we're *not* doing push notifications for
-  this). Exited only by a tap (→ `LYINGDOWN`, startled) or a drag.
+- **ASLEEP** (~99% of the time): stationary, deep sleep. On the same random timer,
+  weighted so a hungrier cat is more active, one of two things can happen: a purely
+  cosmetic twitch (a built-in, in-game "he wants food" cue — see §7 on why we're *not*
+  doing push notifications for this), or — much rarer — he wakes up on his own, the
+  same startled-awake transition a tap would trigger but silent (no meow, no thought
+  bubble), landing in `LYINGDOWN` and immediately running the noticing-food check
+  below. This is what lets a hungry-enough cat left alone long enough get up and find
+  the bowl himself, rather than only ever waking when tapped. Otherwise exited by a tap
+  (→ `LYINGDOWN`, startled) or a drag.
 - **LYINGDOWN**: resting, alert-ish. Reached from `ASLEEP` (tapped → startled awake),
   from `SITTING` (settles back down after its hold timer), from `DRAGGED` (set down
   without being fed), or after eating. Auto-transitions to `ASLEEP` after ~2.5s via a
   "drifting off" animation unless tapped first, which instead sits him up.
 - **SITTING**: upright and alert. Reached only by tapping a `LYINGDOWN` cat ("sits up"
   animation) — the most awake he gets without being handled directly. Auto-transitions
-  back to `LYINGDOWN` after ~3s via a "sitting down" animation. Tapping while `SITTING`
-  does nothing further for now.
+  back to `LYINGDOWN` after ~3s via a "sitting down" animation.
 - **DRAGGED**: being held/moved by the player. Entered from `LYINGDOWN`, `SITTING`, or
   `ASLEEP` via a "picked up" animation; exited via a "released" animation the moment
   the player lets go, landing back in `LYINGDOWN` (see §6 for how drop position
@@ -114,8 +118,48 @@ tap's usual effect (waking/sitting up) — it always resolves to either an eatin
 bite, which is how a hungry cat (limited to one automatic bite on noticing) or a not
 very hungry one (no automatic bite at all) can be topped up deliberately.
 
-Transitions only exist for one facing (southeast); the mirrored facing (southwest) is
-a CSS horizontal flip, not a separate asset (see §7).
+**Wandering**: three different moments each carry the same chance of sending him off to
+a different, random spot instead of settling where he is — a poke that isn't about food
+(above), and settling after eating a bite (§5) or after declining food (above). A
+fourth moment is related but targeted rather than random: waking up (§4 above) to find
+non-empty food waiting at a spot other than his own, gated by the same hunger tiers
+that make him self-feed (§3), has a chance to send him straight to that food's spot
+instead of a random one — so a hungry-enough cat left alone long enough doesn't just
+wait for food to land in his lap, he can go find it himself. Whichever triggers it,
+it's the same "sits up" animation, but instead of settling back down in place he
+actually walks over, then settles `SITTING` at the new spot, running the usual
+noticing-food check on arrival in case that spot happens to have food too. This also
+means poking a `SITTING` cat is no longer always a no-op. The same
+underlying idea happens unattended too, server-side: see §6 for the "he might've moved
+while nobody was watching" mechanic (that version teleports rather than walking, since
+there's no one there to see it).
+
+The walk itself is direction-dependent, compared by the two spots' x-coordinates (§6):
+heading toward larger x plays `startwalking-southeast.gif` (sit → stand into an
+eastward gait) into a looping `walking-southeast.gif`; heading toward smaller x plays
+`turning-southeast.gif` (sit east-facing → pivot through a front-on turn → walking-west
+gait) into a looping `walking-southwest.gif`. Unlike every other transition, the
+westward pair are genuine dedicated west-facing art, not a CSS mirror of the eastward
+one — an earlier attempt at generating just the turn (leaving the walk cycle itself
+mirrored) kept turning to show his *back* rather than pivoting to a mirrored profile,
+which doesn't hand off cleanly into any walk cycle; a full dedicated westward pair
+sidestepped that rather than fighting the generator further. Both lead-ins are
+calibrated (via `assets_raw/reprocess_gif.py`) to hand off from the real
+`sitting-southeast.png` bounding box and into their respective walk loop's, the same
+way eat/nope/liedown already do.
+
+Arrival plays the same two lead-ins in reverse — `stopwalking-southeast.gif` and
+`stopturning-southeast.gif` — settling him back down to `SITTING` the same way he got
+going, rather than cutting straight from mid-stride to the static pose (the westward
+one has the nice side effect of turning him back to face into the room rather than
+leaving him facing wherever he walked in from). These are generated once, mechanically,
+by `assets_raw/reverse_gif.py` reversing the already-calibrated forward clips' frame
+order — no new AI art or recalibration needed, since a bounding box reversed is still
+the same bounding box at each end.
+
+Transitions otherwise only exist for one facing (southeast); the mirrored facing
+(southwest) is a CSS horizontal flip, not a separate asset (see §7) — the walk pair
+above is the one deliberate exception.
 
 Petting is the other interaction for an awake cat (below); the tooltip on the cat
 sprite switches between "Tap to wake him" (asleep) and "Pet him!" (lying down or
@@ -127,6 +171,12 @@ as the pointer stays down, instead of starting a drag — he doesn't move. v1 is
 sound-only regardless of state; no sprite change, no effect on the sleep timer. A real
 drag only starts once the pointer travels past that radius, from wherever it is at
 that point — the purr loop stops the instant that happens.
+
+**Ambient sound**: on the same random timer as the asleep behaviors above, a cat
+resting awake (`LYINGDOWN` or `SITTING`, not mid-transition) will occasionally purr or
+meow to himself with a matching thought bubble — flavor only, no effect on any stat.
+Unlike the silent self-wake and the silent cosmetic stir, this one does make noise; see
+§7 for why that's still consistent with keeping an open tab from being noisy.
 
 ## 5. Feeding Interaction
 
@@ -175,12 +225,38 @@ v1 spots, each a landing point on the background art:
 | `table` | On top of the round dining table |
 | `couch` | On the couch, right side |
 | `floor-right` | Open floor, on the rug |
-| `floor-left` | Open floor, bottom-left corner |
+| `scales` | On the kitchen scale, bottom-left corner |
 
 This list is easy to extend later — adding a spot is just picking a new pixel
 coordinate on the background, no new art or mechanics.
 
-## 7. Visual Style
+`scales` is a special case: the player can drag the cat there like any other spot, but
+he never ends up there through any self-directed movement — not the random wandering
+below, and not the wander-to-food case in §4, even if a bowl happens to be sitting on
+the scale. Every other spot is fair game for both.
+
+Dropping him on the scale shows a live readout over the scale's built-in LED display
+(baked into the background art) with his current weight — the `0–100` weight stat
+mapped onto a plausible `2.00–5.00 kg` range rather than shown as a raw number. Once
+he's settled, a thought bubble reacts to the reading with one of four flavor verdicts
+(too thin, could eat more, healthy and pleased, or thoroughly chonky), then — after a
+short beat to actually let the reading sink in — he wanders off to a random other spot
+(§4's random wander, minus the targeting) exactly like an unprompted wander, same as he
+never walks *onto* the scale on his own (above). The readout (and the verdict bubble)
+stay up for a few seconds even after he's left, so nobody has to read them mid-stride.
+This is purely a display, layered client-side on top of the shared `weight` stat — it
+doesn't change how weight is simulated (§3), and is a first step toward replacing the
+top-of-screen weight bar with this as the primary way to check in on his weight.
+
+**Wandering while unwatched**: besides moves the player makes directly, `cat_spot` can
+also change server-side on its own — a chance, scaled by elapsed wall-clock time the
+same way hunger/weight decay is (§3), that he's moved to a different spot during a gap.
+This is only ever rolled on a genuinely fresh page load (the client marks that first
+`GET /api/state` specially — see §8), never on an already-open tab's periodic
+background poll, precisely so nobody watching the scene sees him teleport live — he can
+only ever have moved *between* visits, the same way a real cat wanders off while you're
+not in the room. See §4 for the other half of this (a poke-triggered version, animated
+client-side).
 
 A single illustrated background image (the room from §6, furniture included), a cat
 sprite, a food bowl sprite (full/half/almostempty/empty). Animation via a small hand-drawn sprite sheet
@@ -195,10 +271,12 @@ push-subscription infrastructure. (Worth revisiting later if check-ins turn out 
 too infrequent in practice.)
 
 **Sound**: a meow plays on deliberate player actions (tapping the cat), and a purr
-plays when he's successfully fed — both tied to an explicit action, not to the
-passive/ambient stirring animation, so leaving the tab open doesn't produce
-unprompted audio every few seconds. A mute toggle in the header persists to
-`localStorage` (a device-local preference, not part of the shared game state).
+plays when he's successfully fed. The passive cosmetic stir and the silent self-wake
+(§4) never make noise on their own, so an idle open tab doesn't start meowing out of
+nowhere — the one deliberate exception is the low-frequency ambient purr/meow (§4)
+while he's resting awake, which is the "ambient" case worth actually hearing
+occasionally. A mute toggle in the header persists to `localStorage` (a device-local
+preference, not part of the shared game state).
 
 ## 8. Persistence & API
 
@@ -229,8 +307,11 @@ the spot list changes.
 
 Endpoints:
 
-- `GET /api/state` — applies elapsed-time decay to hunger/weight since `updated_at`,
-  persists and returns the recomputed state (cat spot, food spot, hunger, weight).
+- `GET /api/state?fresh=true` — applies elapsed-time decay to hunger/weight since
+  `updated_at`, persists and returns the recomputed state (cat spot, food spot, hunger,
+  weight). The `fresh=true` query param additionally rolls the wandering-while-unwatched
+  chance (§6) into the same elapsed-time window; the client passes it only on the very
+  first fetch after a page load, never on its periodic background poll (see §9).
 - `POST /api/move-cat { spotId }` — updates `cat_spot` (so the cat is left wherever
   the last player dropped it). 400s if `spotId` isn't a known spot.
 - `POST /api/place-food { spotId }` — sets `food_spot` and sets `food_level` to `full`
@@ -257,9 +338,12 @@ handful of elements, which doesn't warrant React/Vue overhead. Rough shape:
 - Pointer-event drag handling for cat and food sprites: while dragging, the sprite
   snaps live to whichever spot (§6) is nearest the pointer, so the drag itself
   previews where it'll land rather than only snapping on drop.
-- Sync with the backend: fetch `GET /api/state` on load, and after any action that
-  changes persisted state (feed, move-cat, place-food); no continuous polling needed
-  since this isn't a real-time multiplayer game.
+- Sync with the backend: fetch `GET /api/state?fresh=true` on load (the "fresh" flag
+  is what allows the wandering-while-unwatched roll, §6), after any action that changes
+  persisted state (feed, move-cat, place-food), and on a 2-minute background poll
+  (`GET /api/state`, no `fresh` flag) so hunger/weight visibly creep along in a tab
+  that's been left open — this isn't a real-time multiplayer game, so that poll is a
+  freshness convenience rather than something the simulation depends on (§3).
 
 ## 10. Out of Scope for v1
 
@@ -277,5 +361,9 @@ Not design decisions so much as numbers to adjust after actually playing with it
 
 - Hunger rise rate, feed amount, weight decay/gain rate (§3)
 - Hunger tier thresholds (15/40/70) and bites per bowl (currently 3) (§3/§5)
-- Stir/wake frequency curve vs. hunger (§4)
+- Stir/self-wake frequency curve vs. hunger, and the ambient purr/meow rate (§4)
+- Wander chance (§4, shared by the poke/eat/decline triggers), the separate
+  wander-to-food-on-waking chance (§4), and the wandering-while-unwatched per-hour
+  chance (§6)
 - Exact spot pixel coordinates as the background art gets refined (§6)
+- The `2.00–5.00 kg` display range the scale readout maps the weight stat onto (§6)

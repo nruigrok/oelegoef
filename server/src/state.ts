@@ -1,5 +1,5 @@
 import { db } from "./db.js";
-import type { SpotId } from "./spots.js";
+import { WANDERABLE_SPOT_IDS, type SpotId } from "./spots.js";
 
 // How much food is left in the bowl — a fresh bowl holds three bites, emptying
 // one level per feed (see design.md §5).
@@ -38,9 +38,24 @@ const HUNGER_RISE_PER_HOUR = 5;
 const WEIGHT_DECAY_PER_HOUR = 0.5;
 const FEED_HUNGER_DROP = 30;
 const FEED_WEIGHT_GAIN = 3;
+// Chance he's wandered to a different spot, scaled by elapsed hours the same way as
+// hunger/weight — see rollWander() and design.md §4/§6. Only ever rolled on a "fresh"
+// state fetch (a new page load), never on an already-open tab's periodic poll, so
+// nobody sees him teleport live — see getDecayedState().
+const WANDER_CHANCE_PER_HOUR = 0.15;
 
 const clamp = (value: number, min = 0, max = 100) =>
   Math.min(max, Math.max(min, value));
+
+/** Treats the gap as a single Bernoulli trial scaled by elapsed hours — he either
+ * wandered once during the gap or he didn't; good enough at these small probabilities
+ * without modeling multiple hops. */
+function rollWander(currentSpot: SpotId, hoursElapsed: number): SpotId {
+  const chance = 1 - Math.pow(1 - WANDER_CHANCE_PER_HOUR, hoursElapsed);
+  if (Math.random() >= chance) return currentSpot;
+  const others = WANDERABLE_SPOT_IDS.filter((id) => id !== currentSpot);
+  return others[Math.floor(Math.random() * others.length)];
+}
 
 function rowToState(row: GameStateRow): GameState {
   return {
@@ -74,8 +89,13 @@ function persist(state: GameState): GameState {
   return state;
 }
 
-/** Applies decay for elapsed wall-clock time since the last update, and persists the result. */
-export function getDecayedState(): GameState {
+/**
+ * Applies decay for elapsed wall-clock time since the last update, and persists the
+ * result. With `allowWander`, also rolls a chance he's moved to a different spot on
+ * his own during that gap — pass it only for a fresh page load (see design.md §4),
+ * never for a poll against a tab that's already open and being watched.
+ */
+export function getDecayedState(opts: { allowWander?: boolean } = {}): GameState {
   const state = rowToState(selectRow.get() as unknown as GameStateRow);
   const now = Date.now();
   const hoursElapsed = (now - state.updatedAt) / (1000 * 60 * 60);
@@ -86,6 +106,7 @@ export function getDecayedState(): GameState {
     ...state,
     hunger: clamp(state.hunger + HUNGER_RISE_PER_HOUR * hoursElapsed),
     weight: clamp(state.weight - WEIGHT_DECAY_PER_HOUR * hoursElapsed),
+    catSpot: opts.allowWander ? rollWander(state.catSpot, hoursElapsed) : state.catSpot,
     updatedAt: now,
   });
 }

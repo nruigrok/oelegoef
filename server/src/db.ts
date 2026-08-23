@@ -39,6 +39,6 @@ const row = db.prepare("SELECT id FROM game_state WHERE id = 1").get();
 if (!row) {
   db.prepare(
     `INSERT INTO game_state (id, hunger, weight, cat_spot, food_spot, food_full, food_level, updated_at)
-     VALUES (1, 20, 50, 'floor-left', NULL, 1, 'full', ?)`
+     VALUES (1, 20, 50, 'couch', NULL, 1, 'full', ?)`
   ).run(Date.now());
 }
