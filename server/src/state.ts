@@ -1,12 +1,26 @@
 import { db } from "./db.js";
 import type { SpotId } from "./spots.js";
 
+// How much food is left in the bowl — a fresh bowl holds three bites, emptying
+// one level per feed (see design.md §5).
+export const FOOD_LEVELS = ["full", "half", "almostempty", "empty"] as const;
+export type FoodLevel = (typeof FOOD_LEVELS)[number];
+
+export function isValidFoodLevel(value: unknown): value is FoodLevel {
+  return typeof value === "string" && (FOOD_LEVELS as readonly string[]).includes(value);
+}
+
+function nextFoodLevel(level: FoodLevel): FoodLevel {
+  const idx = FOOD_LEVELS.indexOf(level);
+  return FOOD_LEVELS[Math.min(idx + 1, FOOD_LEVELS.length - 1)];
+}
+
 export interface GameState {
   hunger: number;
   weight: number;
   catSpot: SpotId;
   foodSpot: SpotId | null;
-  foodFull: boolean;
+  foodLevel: FoodLevel;
   updatedAt: number;
 }
 
@@ -15,14 +29,14 @@ interface GameStateRow {
   weight: number;
   cat_spot: string;
   food_spot: string | null;
-  food_full: number;
+  food_level: string;
   updated_at: number;
 }
 
 // Tunable simulation parameters — see design.md §3 and §11.
 const HUNGER_RISE_PER_HOUR = 5;
 const WEIGHT_DECAY_PER_HOUR = 0.5;
-const FEED_HUNGER_DROP = 70;
+const FEED_HUNGER_DROP = 30;
 const FEED_WEIGHT_GAIN = 3;
 
 const clamp = (value: number, min = 0, max = 100) =>
@@ -34,7 +48,7 @@ function rowToState(row: GameStateRow): GameState {
     weight: row.weight,
     catSpot: row.cat_spot as SpotId,
     foodSpot: row.food_spot as SpotId | null,
-    foodFull: !!row.food_full,
+    foodLevel: row.food_level as FoodLevel,
     updatedAt: row.updated_at,
   };
 }
@@ -44,7 +58,7 @@ const selectRow = db.prepare("SELECT * FROM game_state WHERE id = 1");
 const updateRow = db.prepare(
   `UPDATE game_state
    SET hunger = @hunger, weight = @weight, cat_spot = @catSpot,
-       food_spot = @foodSpot, food_full = @foodFull, updated_at = @updatedAt
+       food_spot = @foodSpot, food_level = @foodLevel, updated_at = @updatedAt
    WHERE id = 1`
 );
 
@@ -54,7 +68,7 @@ function persist(state: GameState): GameState {
     weight: state.weight,
     catSpot: state.catSpot,
     foodSpot: state.foodSpot,
-    foodFull: state.foodFull ? 1 : 0,
+    foodLevel: state.foodLevel,
     updatedAt: state.updatedAt,
   });
   return state;
@@ -84,13 +98,13 @@ export function moveCat(spotId: SpotId): GameState {
 export function placeFood(spotId: SpotId): GameState {
   const state = getDecayedState();
   // A bowl placed from the tray is always a fresh, full one.
-  return persist({ ...state, foodSpot: spotId, foodFull: true });
+  return persist({ ...state, foodSpot: spotId, foodLevel: "full" });
 }
 
 /** Sends the bowl back to the tray — where it's always available, full. */
 export function refillFood(): GameState {
   const state = getDecayedState();
-  return persist({ ...state, foodSpot: null, foodFull: true });
+  return persist({ ...state, foodSpot: null, foodLevel: "full" });
 }
 
 /** Testing-only backdoor to force hunger/weight/spots/bowl state directly — see /api/debug. */
@@ -99,7 +113,7 @@ export function debugSetState(patch: {
   weight?: number;
   catSpot?: SpotId;
   foodSpot?: SpotId | null;
-  foodFull?: boolean;
+  foodLevel?: FoodLevel;
 }): GameState {
   const state = getDecayedState();
   return persist({
@@ -107,24 +121,25 @@ export function debugSetState(patch: {
     weight: patch.weight !== undefined ? clamp(patch.weight) : state.weight,
     catSpot: patch.catSpot ?? state.catSpot,
     foodSpot: patch.foodSpot !== undefined ? patch.foodSpot : state.foodSpot,
-    foodFull: patch.foodFull ?? state.foodFull,
+    foodLevel: patch.foodLevel ?? state.foodLevel,
     updatedAt: Date.now(),
   });
 }
 
+/** Feeds one bite (one bowl level) if the cat and a non-empty bowl share a spot. */
 export function eatFood(): { fed: boolean; state: GameState } {
   const state = getDecayedState();
 
-  if (state.foodSpot === null || state.foodSpot !== state.catSpot || !state.foodFull) {
+  if (state.foodSpot === null || state.foodSpot !== state.catSpot || state.foodLevel === "empty") {
     return { fed: false, state };
   }
 
-  // The bowl stays put, now empty — it isn't cleared until dragged back to the tray.
+  // The bowl stays put, one level emptier — it isn't cleared until dragged back to the tray.
   const fed = persist({
     ...state,
     hunger: clamp(state.hunger - FEED_HUNGER_DROP),
     weight: clamp(state.weight + FEED_WEIGHT_GAIN),
-    foodFull: false,
+    foodLevel: nextFoodLevel(state.foodLevel),
   });
   return { fed: true, state: fed };
 }

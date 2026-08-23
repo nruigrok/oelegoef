@@ -1,7 +1,7 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getDecayedState, moveCat, placeFood, refillFood, eatFood, debugSetState } from "./state.js";
+import { getDecayedState, moveCat, placeFood, refillFood, eatFood, debugSetState, isValidFoodLevel } from "./state.js";
 import { isValidSpotId } from "./spots.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -44,7 +44,7 @@ app.post("/api/refill-food", (_req, res) => {
 // Testing-only backdoor to force hunger/weight/spots/bowl state directly, e.g. to see
 // hungry/thin thresholds without waiting hours for decay. See scripts/debug-set.mjs.
 app.post("/api/debug", (req, res) => {
-  const { hunger, weight, catSpot, foodSpot, foodFull } = req.body ?? {};
+  const { hunger, weight, catSpot, foodSpot, foodLevel } = req.body ?? {};
 
   if (catSpot !== undefined && !isValidSpotId(catSpot)) {
     res.status(400).json({ error: "catSpot must be a known spot" });
@@ -54,6 +54,10 @@ app.post("/api/debug", (req, res) => {
     res.status(400).json({ error: "foodSpot must be a known spot or null" });
     return;
   }
+  if (foodLevel !== undefined && !isValidFoodLevel(foodLevel)) {
+    res.status(400).json({ error: "foodLevel must be one of full/half/almostempty/empty" });
+    return;
+  }
 
   res.json(
     debugSetState({
@@ -61,7 +65,7 @@ app.post("/api/debug", (req, res) => {
       weight: typeof weight === "number" ? weight : undefined,
       catSpot,
       foodSpot,
-      foodFull: typeof foodFull === "boolean" ? foodFull : undefined,
+      foodLevel,
     })
   );
 });

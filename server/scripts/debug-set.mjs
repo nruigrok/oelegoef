@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Testing helper: forces hunger/weight/spots/bowl state on the running server.
-// Usage: npm run debug -w server -- --hunger 80 --weight 20 [--catSpot couch] [--foodSpot table] [--foodFull false]
+// Usage: npm run debug -w server -- --hunger 80 --weight 20 [--catSpot couch] [--foodSpot table] [--foodLevel half]
 
 const args = process.argv.slice(2);
 const patch = {};
@@ -13,7 +13,7 @@ for (let i = 0; i < args.length; i++) {
   i++;
 
   if (key === "hunger" || key === "weight") patch[key] = Number(value);
-  else if (key === "foodFull") patch[key] = value !== "false";
+  else if (key === "foodLevel") patch[key] = value;
   else if (key === "foodSpot") patch[key] = value === "null" ? null : value;
   else if (key === "catSpot") patch[key] = value;
   else {
@@ -24,7 +24,7 @@ for (let i = 0; i < args.length; i++) {
 
 if (Object.keys(patch).length === 0) {
   console.error(
-    "Usage: npm run debug -w server -- --hunger 80 --weight 20 [--catSpot couch] [--foodSpot table] [--foodFull false]"
+    "Usage: npm run debug -w server -- --hunger 80 --weight 20 [--catSpot couch] [--foodSpot table] [--foodLevel half]"
   );
   process.exit(1);
 }

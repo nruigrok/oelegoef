@@ -1,5 +1,5 @@
 import "./style.css";
-import { api, type GameState } from "./api.ts";
+import { api, type GameState, type FoodLevel } from "./api.ts";
 import { getSpot, nearestSpot } from "./spots.ts";
 import catLyingdownSrc from "./assets/cat/lyingdown-southeast.png";
 import catAsleepSrc from "./assets/cat/asleep-southeast.png";
@@ -19,7 +19,16 @@ import liedownGif from "./assets/cat/liedown-southeast.gif";
 import eatGif from "./assets/cat/eat-southeast.gif";
 import nopeGif from "./assets/cat/nope-southeast.gif";
 import bowlFullSrc from "./assets/objects/bowl_full.png";
+import bowlHalfSrc from "./assets/objects/bowl_half.png";
+import bowlAlmostEmptySrc from "./assets/objects/bowl_almostempty.png";
 import bowlEmptySrc from "./assets/objects/bowl_empty.png";
+
+const FOOD_LEVEL_SPRITES: Record<FoodLevel, string> = {
+  full: bowlFullSrc,
+  half: bowlHalfSrc,
+  almostempty: bowlAlmostEmptySrc,
+  empty: bowlEmptySrc,
+};
 
 // Fetch and decode every sprite as soon as the script runs, in parallel with the initial
 // /api/state round-trip — otherwise the *first* time a given transition plays, swapping
@@ -29,7 +38,7 @@ for (const src of [
   catLyingdownSrc, catAsleepSrc, catDraggedSrc, catSittingSrc,
   pickedUpGif, releasedGif, startledGif, driftOffGif,
   situpGif, liedownGif, eatGif, nopeGif,
-  bowlFullSrc, bowlEmptySrc,
+  bowlFullSrc, bowlHalfSrc, bowlAlmostEmptySrc, bowlEmptySrc,
 ]) {
   new Image().src = src;
 }
@@ -52,10 +61,21 @@ const EAT_LOOP_MS = 1800; // eat-southeast.gif: 9 frames @ 200ms, loops forever 
 const EAT_REPEAT_COUNT = 3;
 const EAT_DURATION_MS = EAT_LOOP_MS * EAT_REPEAT_COUNT;
 const NOPE_DURATION_MS = 3400; // nope-southeast.gif: 17 frames @ 200ms
-// Chance he eats when he notices food, scaled by hunger — even well-fed, he'll often
-// still take a bite; ravenous, it's a sure thing. Tune alongside design.md §3/§11.
-const BASE_EAT_CHANCE = 0.3;
-const HUNGER_EAT_CHANCE_WEIGHT = 0.7;
+
+// Hunger tiers driving eating behavior — see design.md §3/§4. Boundaries match the
+// hunger-bar warn/bad colors in renderStats() so the bar always reflects the tier.
+const HUNGRY_THRESHOLD = 40;
+const VERY_HUNGRY_THRESHOLD = 70;
+const NOT_HUNGRY_THRESHOLD = 15;
+
+type HungerTier = "veryHungry" | "hungry" | "notVeryHungry" | "notHungry";
+
+function hungerTier(hunger: number): HungerTier {
+  if (hunger > VERY_HUNGRY_THRESHOLD) return "veryHungry";
+  if (hunger > HUNGRY_THRESHOLD) return "hungry";
+  if (hunger >= NOT_HUNGRY_THRESHOLD) return "notVeryHungry";
+  return "notHungry";
+}
 
 const sceneEl = document.querySelector<HTMLDivElement>("#scene")!;
 const catEl = document.querySelector<HTMLDivElement>("#cat")!;
@@ -319,10 +339,14 @@ function decideOnFood() {
   transitionTimer = setTimeout(resolveFoodDecision, FOOD_DECISION_PAUSE_MS);
 }
 
+/** Whether noticing the food on his own is enough to make him eat, per design.md §4. */
+function selfFeedsAtTier(tier: HungerTier) {
+  return tier === "veryHungry" || tier === "hungry";
+}
+
 function resolveFoodDecision() {
-  const hunger = state?.hunger ?? 0;
-  const eatChance = BASE_EAT_CHANCE + (hunger / 100) * HUNGER_EAT_CHANCE_WEIGHT;
-  if (Math.random() < eatChance) {
+  const tier = hungerTier(state?.hunger ?? 0);
+  if (selfFeedsAtTier(tier)) {
     void eatFood();
   } else {
     showNopeTransition();
@@ -340,9 +364,14 @@ function showNopeTransition() {
 }
 
 /**
- * Plays once as he eats. The server round-trip (which drops hunger and empties the bowl)
- * runs alongside the animation rather than after it, so a slow response can't stall the gif —
- * whichever finishes last, the two are joined before he settles back down.
+ * Plays once as he eats one bite (one bowl level). The server round-trip (which drops
+ * hunger and empties one level of the bowl) runs alongside the animation rather than
+ * after it, so a slow response can't stall the gif — whichever finishes last, the two
+ * are joined before he settles back down.
+ *
+ * If he's still very hungry afterward and the bowl isn't empty, he keeps going —
+ * that's what makes a "very hungry" cat polish off the whole bowl unattended, per
+ * design.md §4/§5.
  */
 async function eatFood() {
   catGeneration++;
@@ -359,12 +388,16 @@ async function eatFood() {
     playSound(purrSound);
     setStatus("Toby ate! 😋");
   }
+  if (hungerTier(result.state.hunger) === "veryHungry" && result.state.foodLevel !== "empty") {
+    void eatFood();
+    return;
+  }
   showSitting();
 }
 
-/** Checks whether an awake cat is sitting next to a full bowl, and if so, has him notice it. */
+/** Checks whether an awake cat is sitting next to a non-empty bowl, and if so, has him notice it. */
 function checkForFood() {
-  if (!state || state.foodSpot !== state.catSpot || !state.foodFull) return;
+  if (!state || state.foodSpot !== state.catSpot || state.foodLevel === "empty") return;
   if (catEl.classList.contains("asleep")) return;
   if (catEl.classList.contains("sitting")) {
     decideOnFood();
@@ -379,20 +412,36 @@ function settleIntoLyingDown() {
   checkForFood();
 }
 
+/**
+ * A poke while he's sitting right next to non-empty food: not-very-hungry and hungry
+ * cats won't take a bite on their own but will for a poke (an extra bite, in the
+ * hungry case, on top of the one he already helped himself to); not-hungry cats still
+ * turn it down. Returns whether the tap was consumed this way — see design.md §4.
+ */
+function tryPokeToEat(): boolean {
+  if (!state || state.foodSpot !== state.catSpot || state.foodLevel === "empty") return false;
+  if (hungerTier(state.hunger) === "notHungry") {
+    showNopeTransition();
+  } else {
+    void eatFood();
+  }
+  return true;
+}
+
 function handleCatTap() {
   if (catEl.classList.contains("asleep")) {
     showThought("He, wat? Waar ben ik? Wie ben jij?");
     playMeow();
     showStartledTransition();
-  } else if (!catEl.classList.contains("sitting")) {
+  } else if (!tryPokeToEat() && !catEl.classList.contains("sitting")) {
     showSitUpTransition();
   }
 }
 
 function renderStats(s: GameState) {
   hungerFillEl.style.width = `${s.hunger}%`;
-  hungerFillEl.classList.toggle("warn", s.hunger > 40 && s.hunger <= 70);
-  hungerFillEl.classList.toggle("bad", s.hunger > 70);
+  hungerFillEl.classList.toggle("warn", s.hunger > HUNGRY_THRESHOLD && s.hunger <= VERY_HUNGRY_THRESHOLD);
+  hungerFillEl.classList.toggle("bad", s.hunger > VERY_HUNGRY_THRESHOLD);
 
   weightFillEl.style.width = `${s.weight}%`;
   weightFillEl.classList.toggle("bad", s.weight < 25);
@@ -426,7 +475,7 @@ function renderFood(s: GameState) {
       refillFood
     );
   }
-  currentFoodEl.style.backgroundImage = `url(${s.foodFull ? bowlFullSrc : bowlEmptySrc})`;
+  currentFoodEl.style.backgroundImage = `url(${FOOD_LEVEL_SPRITES[s.foodLevel]})`;
   positionFoodAtSpot(currentFoodEl, s.foodSpot);
 }
 
@@ -630,7 +679,7 @@ declare global {
         weight?: number;
         catSpot?: string;
         foodSpot?: string | null;
-        foodFull?: boolean;
+        foodLevel?: FoodLevel;
       }): Promise<GameState>;
     };
   }

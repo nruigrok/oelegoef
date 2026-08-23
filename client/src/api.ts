@@ -1,9 +1,11 @@
+export type FoodLevel = "full" | "half" | "almostempty" | "empty";
+
 export interface GameState {
   hunger: number;
   weight: number;
   catSpot: string;
   foodSpot: string | null;
-  foodFull: boolean;
+  foodLevel: FoodLevel;
   updatedAt: number;
 }
 
@@ -48,7 +50,7 @@ export const api = {
     weight?: number;
     catSpot?: string;
     foodSpot?: string | null;
-    foodFull?: boolean;
+    foodLevel?: FoodLevel;
   }) =>
     request<GameState>("/api/debug", {
       method: "POST",

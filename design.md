@@ -37,24 +37,26 @@ Two persistent stats, each `0–100`, simulated continuously against wall-clock 
 applies decay for elapsed time since `updated_at`, persists the result, then returns it.
 No cron job needed.
 
-- **Hunger** — `0` (full) to `100` (starving). Rises **+5/hour**. Feeding drops it by a
-  large fixed amount (e.g. `-70`, floored at 0) rather than resetting to 0, so
-  back-to-back feeding doesn't feel exploitable.
+- **Hunger** — `0` (full) to `100` (starving). Rises **+5/hour**. Each bite (§5) drops
+  it by a fixed amount (`-30`), floored at 0 — a fresh bowl is three bites, so a
+  genuinely starving cat working through the whole thing in one sitting drops by up to
+  `-90`, rather than resetting to 0 in one go.
 - **Weight** — `0` (too thin) to `100`, healthy band roughly `40–60`. Decays
   **-0.5/hour** on its own (metabolism/age — mirrors "he loses weight unless he eats").
-  Each successful feeding adds a flat **+3**, capped at 100.
+  Each bite adds a flat **+3**, capped at 100.
 
 These numbers are starting proposals, easy to retune after playtesting — the point is
 the shape: weight trends down over roughly a week without feeding, hunger becomes
 noticeable within a day, matching a "check in every several hours" cadence.
 
-Visual/behavioral thresholds:
+Hunger tiers drive both the hunger-bar color and how he behaves around food (§4):
 
-| Hunger | State |
-|---|---|
-| 0–30 | Content — occasional happy purr/meow |
-| 30–70 | Normal |
-| 70–100 | Hungry — wakes and meows more often, sad idle animation |
+| Hunger | Tier | Bar color |
+|---|---|---|
+| 0–15 | Not hungry — won't eat, even offered directly | (normal) |
+| 15–40 | Not very hungry — won't eat on his own, but will if poked | (normal) |
+| 40–70 | Hungry — eats one bite on noticing food, then stops; a poke gets him another | warn |
+| 70–100 | Very hungry — eats on his own, repeatedly, until no longer very hungry or the bowl's empty | bad |
 
 | Weight | State |
 |---|---|
@@ -94,16 +96,23 @@ active player attention keeps him more awake than `ASLEEP`.
   like the real Toby. If the spot he lands on has food, landing in `LYINGDOWN` triggers
   the noticing check below rather than eating immediately.
 
-**Noticing food**: an awake cat (`LYINGDOWN` or `SITTING`) whose spot matches a full
-bowl's spot notices it — checked at the two moments this can newly become true: the
-food or the cat arriving at the other's spot (§5), and the cat waking up when food was
-already sitting there (asleep cats don't notice; dragging doesn't count as awake). On
-noticing, he sits up ("notice" reuses the sit-up animation) and pauses briefly as if
-considering it, then resolves to either eating (§5) or turning it down (a "nope"
-animation) before settling back to `SITTING` (not `LYINGDOWN` — from there he follows
-the normal `SITTING` hold timer down) — the food stays exactly where it was either
-way. Whether he eats is a hunger-weighted coin flip, not automatic: hungrier
-means more likely, but even well-fed he'll often still take a bite.
+**Noticing food**: an awake cat (`LYINGDOWN` or `SITTING`) whose spot matches a
+non-empty bowl's spot notices it — checked at the two moments this can newly become
+true: the food or the cat arriving at the other's spot (§5), and the cat waking up when
+food was already sitting there (asleep cats don't notice; dragging doesn't count as
+awake). On noticing, he sits up ("notice" reuses the sit-up animation) and pauses
+briefly as if considering it, then resolves deterministically by hunger tier (§3): very
+hungry or hungry eats a bite (§5); not very hungry or not hungry turns it down (a
+"nope" animation) — before settling back to `SITTING` (not `LYINGDOWN` — from there he
+follows the normal `SITTING` hold timer down). The food stays exactly where it was
+either way.
+
+**Poking for a bite**: tapping him while awake (`LYINGDOWN` or `SITTING`) and sitting
+next to non-empty food is a separate check from noticing, and takes priority over the
+tap's usual effect (waking/sitting up) — it always resolves to either an eating or a
+"nope" animation instead. A not-hungry cat still turns it down; every other tier eats a
+bite, which is how a hungry cat (limited to one automatic bite on noticing) or a not
+very hungry one (no automatic bite at all) can be topped up deliberately.
 
 Transitions only exist for one facing (southeast); the mirrored facing (southwest) is
 a CSS horizontal flip, not a separate asset (see §7).
@@ -132,13 +141,15 @@ that point — the purr loop stops the instant that happens.
    — both directions work, mirroring "we pick him up and set him in front of the
    chicken, or pick up the chicken and set it in front of him." Dragging snaps to a
    spot the same way.
-4. When the cat's spot and the food's spot match and the cat is awake, he notices the
-   food (§4) and decides whether to eat it. If he eats: an eating animation plays,
-   hunger drops and weight ticks up per §3, and the bowl sprite switches from full to
-   empty — it stays put rather than disappearing. If he turns it down: a "nope"
-   animation plays and the bowl is left full.
-5. Dragging the bowl (full or empty) back onto the tray returns it there and refills
-   it, ready to be placed again.
+4. A fresh bowl holds three bites, drawn down one level per bite through four sprites
+   — `full → half → almostempty → empty` — rather than disappearing or resetting; it
+   stays exactly where it was placed regardless of level. When the cat's spot and the
+   food's spot match and the cat is awake, whether and how many bites he takes is
+   governed by his hunger tier and pokes (§4): an eating animation plays per bite,
+   hunger drops and weight ticks up per §3 each time; a decline plays a "nope"
+   animation and leaves the level untouched.
+5. Dragging the bowl (any level) back onto the tray returns it there and refills it to
+   full, ready to be placed again.
 
 Dragging is implemented with pointer events (not native HTML5 drag-and-drop), so it
 works the same with mouse and touch — this will mostly be used from a phone.
@@ -172,7 +183,7 @@ coordinate on the background, no new art or mechanics.
 ## 7. Visual Style
 
 A single illustrated background image (the room from §6, furniture included), a cat
-sprite, a food bowl sprite (full/empty). Animation via a small hand-drawn sprite sheet
+sprite, a food bowl sprite (full/half/almostempty/empty). Animation via a small hand-drawn sprite sheet
 per cat state (asleep, stirring/meow, idle, walk, eat) stepped with CSS, rendered as
 absolutely positioned DOM elements rather than canvas — one character and one prop
 over a static background is still cheap enough that DOM+CSS is simpler to build and
@@ -206,7 +217,7 @@ hunger      REAL
 weight      REAL
 cat_spot    TEXT
 food_spot   TEXT NULLABLE
-food_full   BOOLEAN
+food_level  TEXT   -- one of full / half / almostempty / empty
 updated_at  TIMESTAMP
 ```
 
@@ -222,13 +233,14 @@ Endpoints:
   persists and returns the recomputed state (cat spot, food spot, hunger, weight).
 - `POST /api/move-cat { spotId }` — updates `cat_spot` (so the cat is left wherever
   the last player dropped it). 400s if `spotId` isn't a known spot.
-- `POST /api/place-food { spotId }` — sets `food_spot` and marks the bowl full (a
-  fresh bowl from the tray). Same spot validation as `move-cat`.
-- `POST /api/feed` — feeds if `food_spot` is set, equals `cat_spot`, and the bowl is
-  full; applies the hunger/weight update and marks the bowl empty (`food_spot` is left
-  as-is — the bowl stays in the scene). Returns `{ fed, state }` either way.
-- `POST /api/refill-food` — clears `food_spot` (bowl returns to the tray) and marks it
-  full again, ready for next time.
+- `POST /api/place-food { spotId }` — sets `food_spot` and sets `food_level` to `full`
+  (a fresh bowl from the tray). Same spot validation as `move-cat`.
+- `POST /api/feed` — feeds one bite if `food_spot` is set, equals `cat_spot`, and
+  `food_level` isn't already `empty`; applies the hunger/weight update and steps
+  `food_level` down one level (`food_spot` is left as-is — the bowl stays in the
+  scene). Returns `{ fed, state }` either way.
+- `POST /api/refill-food` — clears `food_spot` (bowl returns to the tray) and sets
+  `food_level` back to `full`, ready for next time.
 
 Ephemeral, non-persisted client state: which sub-state of `ASLEEP/STIRRING/AWAKE_IDLE/
 WALKING` the cat is currently animating through, and in-progress drag positions. This
@@ -253,7 +265,6 @@ handful of elements, which doesn't warrant React/Vue overhead. Rough shape:
 
 Ideas worth keeping in mind but deliberately deferred:
 
-- Food depletes slowly rather than being consumed in one go
 - Old food needs to be cleared before we can feed
 - "Resource management" - shopping and boiling food. Different kinds of food
 - Push notifications / reminders
@@ -265,5 +276,6 @@ Ideas worth keeping in mind but deliberately deferred:
 Not design decisions so much as numbers to adjust after actually playing with it:
 
 - Hunger rise rate, feed amount, weight decay/gain rate (§3)
+- Hunger tier thresholds (15/40/70) and bites per bowl (currently 3) (§3/§5)
 - Stir/wake frequency curve vs. hunger (§4)
 - Exact spot pixel coordinates as the background art gets refined (§6)
