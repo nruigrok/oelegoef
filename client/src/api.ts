@@ -1,10 +1,9 @@
 export interface GameState {
   hunger: number;
   weight: number;
-  catX: number;
-  catY: number;
-  foodX: number | null;
-  foodY: number | null;
+  catSpot: string;
+  foodSpot: string | null;
+  foodFull: boolean;
   updatedAt: number;
 }
 
@@ -22,20 +21,37 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   getState: () => request<GameState>("/api/state"),
 
-  moveCat: (x: number, y: number) =>
+  moveCat: (spotId: string) =>
     request<GameState>("/api/move-cat", {
       method: "POST",
-      body: JSON.stringify({ x, y }),
+      body: JSON.stringify({ spotId }),
     }),
 
-  placeFood: (x: number, y: number) =>
+  placeFood: (spotId: string) =>
     request<GameState>("/api/place-food", {
       method: "POST",
-      body: JSON.stringify({ x, y }),
+      body: JSON.stringify({ spotId }),
     }),
 
   feed: () =>
     request<{ fed: boolean; state: GameState }>("/api/feed", {
       method: "POST",
+    }),
+
+  refillFood: () =>
+    request<GameState>("/api/refill-food", {
+      method: "POST",
+    }),
+
+  debugSet: (patch: {
+    hunger?: number;
+    weight?: number;
+    catSpot?: string;
+    foodSpot?: string | null;
+    foodFull?: boolean;
+  }) =>
+    request<GameState>("/api/debug", {
+      method: "POST",
+      body: JSON.stringify(patch),
     }),
 };

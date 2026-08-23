@@ -23,7 +23,18 @@ body {
 
 #stats {
   display: flex;
+  align-items: center;
   gap: 1rem;
+}
+
+#mute-toggle {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 0.25rem;
+  cursor: pointer;
 }
 
 .stat {
@@ -59,10 +70,10 @@ body {
 
 #scene {
   position: relative;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 2 / 3;
   width: 100%;
   border-radius: 16px;
-  background: linear-gradient(180deg, #cfe8d8 0%, #cfe8d8 60%, #d9c9a3 60%, #d9c9a3 100%);
+  background: url("./assets/background.jpg") center / cover no-repeat;
   overflow: hidden;
   touch-action: none;
   user-select: none;
@@ -70,19 +81,36 @@ body {
 
 #cat {
   position: absolute;
+  width: 80px;
+  height: 80px;
   transform: translate(-50%, -50%);
-  font-size: 2.75rem;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  image-rendering: pixelated;
   cursor: grab;
-  transition: filter 0.3s ease, opacity 0.3s ease;
-  filter: grayscale(0.15);
-}
-
-#cat.asleep {
-  opacity: 0.75;
+  /* Keeps this element on its own persistent GPU layer instead of letting the browser
+     promote/demote it on every transform or background-image change — without this,
+     the compositor has occasionally been seen to skip painting a frame entirely
+     (a real, if brief, fully blank cat) even on an unchanging static sprite. */
+  will-change: transform, background-image;
 }
 
 #cat.dragging {
   cursor: grabbing;
+}
+
+#cat.settling,
+.food.settling {
+  transition: left 0.3s ease-out, top 0.3s ease-out;
+}
+
+#cat.flipped {
+  transform: translate(-50%, -50%) scaleX(-1);
+}
+
+#cat.sitting {
+  transform: translate(-50%, -50%) translateY(-6px);
 }
 
 #cat.stirring {
@@ -95,25 +123,57 @@ body {
   75% { transform: translate(-50%, -50%) rotate(8deg); }
 }
 
-.bubble {
+.thought-bubble {
   position: absolute;
-  transform: translate(-50%, -160%);
+  top: 10px;
+  right: 10px;
+  max-width: 65%;
   background: white;
   border: 1px solid #333;
-  border-radius: 10px;
-  padding: 2px 8px;
+  border-radius: 18px;
+  padding: 6px 12px;
   font-size: 0.8rem;
+  text-align: center;
   pointer-events: none;
+  z-index: 5;
 }
 
-.bubble.hidden {
+.thought-bubble.hidden {
   display: none;
+}
+
+.thought-bubble::before,
+.thought-bubble::after {
+  content: "";
+  position: absolute;
+  background: white;
+  border: 1px solid #333;
+  border-radius: 50%;
+}
+
+.thought-bubble::before {
+  width: 14px;
+  height: 14px;
+  bottom: -10px;
+  left: 28px;
+}
+
+.thought-bubble::after {
+  width: 8px;
+  height: 8px;
+  bottom: -20px;
+  left: 18px;
 }
 
 .food {
   position: absolute;
+  width: 30px;
+  height: 30px;
   transform: translate(-50%, -50%);
-  font-size: 2rem;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  image-rendering: pixelated;
   cursor: grab;
   touch-action: none;
 }
@@ -131,13 +191,23 @@ body {
 }
 
 #food-source {
-  font-size: 2.25rem;
+  width: 30px;
+  height: 30px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  image-rendering: pixelated;
   cursor: grab;
   touch-action: none;
 }
 
 #food-source.dragging {
   opacity: 0.4;
+}
+
+#food-source.hidden {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 #status {

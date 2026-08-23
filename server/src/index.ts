@@ -1,7 +1,8 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getDecayedState, moveCat, placeFood, tryFeed } from "./state.js";
+import { getDecayedState, moveCat, placeFood, refillFood, eatFood, debugSetState } from "./state.js";
+import { isValidSpotId } from "./spots.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
@@ -9,35 +10,60 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 const app = express();
 app.use(express.json());
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
 app.get("/api/state", (_req, res) => {
   res.json(getDecayedState());
 });
 
 app.post("/api/move-cat", (req, res) => {
-  const { x, y } = req.body ?? {};
-  if (!isFiniteNumber(x) || !isFiniteNumber(y)) {
-    res.status(400).json({ error: "x and y must be numbers" });
+  const { spotId } = req.body ?? {};
+  if (!isValidSpotId(spotId)) {
+    res.status(400).json({ error: "spotId must be a known spot" });
     return;
   }
-  res.json(moveCat(x, y));
+  res.json(moveCat(spotId));
 });
 
 app.post("/api/place-food", (req, res) => {
-  const { x, y } = req.body ?? {};
-  if (!isFiniteNumber(x) || !isFiniteNumber(y)) {
-    res.status(400).json({ error: "x and y must be numbers" });
+  const { spotId } = req.body ?? {};
+  if (!isValidSpotId(spotId)) {
+    res.status(400).json({ error: "spotId must be a known spot" });
     return;
   }
-  res.json(placeFood(x, y));
+  res.json(placeFood(spotId));
 });
 
 app.post("/api/feed", (_req, res) => {
-  const { fed, state } = tryFeed();
+  const { fed, state } = eatFood();
   res.json({ fed, state });
+});
+
+app.post("/api/refill-food", (_req, res) => {
+  res.json(refillFood());
+});
+
+// Testing-only backdoor to force hunger/weight/spots/bowl state directly, e.g. to see
+// hungry/thin thresholds without waiting hours for decay. See scripts/debug-set.mjs.
+app.post("/api/debug", (req, res) => {
+  const { hunger, weight, catSpot, foodSpot, foodFull } = req.body ?? {};
+
+  if (catSpot !== undefined && !isValidSpotId(catSpot)) {
+    res.status(400).json({ error: "catSpot must be a known spot" });
+    return;
+  }
+  if (foodSpot !== undefined && foodSpot !== null && !isValidSpotId(foodSpot)) {
+    res.status(400).json({ error: "foodSpot must be a known spot or null" });
+    return;
+  }
+
+  res.json(
+    debugSetState({
+      hunger: typeof hunger === "number" ? hunger : undefined,
+      weight: typeof weight === "number" ? weight : undefined,
+      catSpot,
+      foodSpot,
+      foodFull: typeof foodFull === "boolean" ? foodFull : undefined,
+    })
+  );
 });
 
 // In production, the client is built into ../client/dist and served from here
