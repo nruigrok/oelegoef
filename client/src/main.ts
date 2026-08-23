@@ -97,6 +97,11 @@ let settleTimer: ReturnType<typeof setTimeout> | undefined;
 let thoughtTimer: ReturnType<typeof setTimeout> | undefined;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let purrLoopAudio: HTMLAudioElement | null = null;
+// True from the moment any one-shot cat transition/sequence starts until it settles
+// into a stable pose (asleep/lying down/sitting) — gates new taps/drags on the cat so
+// a mid-flight animation (e.g. drifting off) can't get interrupted by a fresh one
+// (e.g. sitting up) landing on top of it.
+let animating = false;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -224,6 +229,7 @@ function toggleMute() {
 /** Resting, alert-ish — reached after being set down, fed, or startled awake. Settles into deep sleep after a bit. */
 function showLyingDown() {
   catGeneration++;
+  animating = false;
   clearTimeout(transitionTimer);
   clearTimeout(settleTimer);
   catEl.style.backgroundImage = `url(${catLyingdownSrc})`;
@@ -235,6 +241,7 @@ function showLyingDown() {
 /** Deep sleep — ~99% of the game. Only exited by a tap (startled) or a drag (picked up). */
 function showAsleep() {
   catGeneration++;
+  animating = false;
   clearTimeout(transitionTimer);
   clearTimeout(settleTimer);
   catEl.style.backgroundImage = `url(${catAsleepSrc})`;
@@ -246,6 +253,7 @@ function showAsleep() {
 /** Sitting up, alert — reached by tapping a lying-down cat. Settles back to lying down after a bit. */
 function showSitting() {
   catGeneration++;
+  animating = false;
   clearTimeout(transitionTimer);
   clearTimeout(settleTimer);
   catEl.style.backgroundImage = `url(${catSittingSrc})`;
@@ -265,6 +273,7 @@ function showDraggedCat() {
 /** Plays once when he's picked up (resting, sitting, or asleep), then hands off to the static dragged sprite. */
 function showPickupTransition() {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   clearTimeout(settleTimer);
   catEl.style.backgroundImage = `url(${pickedUpGif})`;
@@ -275,6 +284,7 @@ function showPickupTransition() {
 /** Plays once as a held cat is set down without being fed; he ends up resting, then checks for food. */
 function showReleaseTransition() {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   catEl.style.backgroundImage = `url(${releasedGif})`;
   resetPoseClasses();
@@ -284,6 +294,7 @@ function showReleaseTransition() {
 /** Plays once as he's startled awake by a tap; he ends up resting again, then checks for food. */
 function showStartledTransition() {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   clearTimeout(settleTimer);
   catEl.style.backgroundImage = `url(${startledGif})`;
@@ -294,6 +305,7 @@ function showStartledTransition() {
 /** Plays once as he drifts off from resting into deep sleep. */
 function showDriftOffTransition(onDone: () => void) {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   catEl.style.backgroundImage = `url(${driftOffGif})`;
   transitionTimer = setTimeout(onDone, DRIFT_OFF_DURATION_MS);
@@ -302,6 +314,7 @@ function showDriftOffTransition(onDone: () => void) {
 /** Plays once as he sits up from lying down (a tap while resting); he ends up sitting. */
 function showSitUpTransition() {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   clearTimeout(settleTimer);
   catEl.style.backgroundImage = `url(${situpGif})`;
@@ -312,6 +325,7 @@ function showSitUpTransition() {
 /** Plays once as he settles from sitting back down to lying down. */
 function showSitDownTransition(onDone: () => void) {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   catEl.style.backgroundImage = `url(${liedownGif})`;
   resetPoseClasses();
@@ -321,6 +335,7 @@ function showSitDownTransition(onDone: () => void) {
 /** Plays once as he sits up upon noticing food next to him, then moves on to deciding whether to eat it. */
 function showNoticeFoodTransition() {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   clearTimeout(settleTimer);
   catEl.style.backgroundImage = `url(${situpGif})`;
@@ -331,6 +346,7 @@ function showNoticeFoodTransition() {
 /** Sitting and considering the food; after a beat, resolves to eating it or turning it down. */
 function decideOnFood() {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   clearTimeout(settleTimer);
   catEl.style.backgroundImage = `url(${catSittingSrc})`;
@@ -356,6 +372,7 @@ function resolveFoodDecision() {
 /** Plays once as he turns the food down; he ends up sitting, the bowl untouched. */
 function showNopeTransition() {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   catEl.style.backgroundImage = `url(${nopeGif})`;
   resetPoseClasses();
@@ -375,6 +392,7 @@ function showNopeTransition() {
  */
 async function eatFood() {
   catGeneration++;
+  animating = true;
   clearTimeout(transitionTimer);
   catEl.style.backgroundImage = `url(${eatGif})`;
   resetPoseClasses();
@@ -398,7 +416,7 @@ async function eatFood() {
 /** Checks whether an awake cat is sitting next to a non-empty bowl, and if so, has him notice it. */
 function checkForFood() {
   if (!state || state.foodSpot !== state.catSpot || state.foodLevel === "empty") return;
-  if (catEl.classList.contains("asleep")) return;
+  if (animating || catEl.classList.contains("asleep")) return;
   if (catEl.classList.contains("sitting")) {
     decideOnFood();
   } else {
@@ -523,6 +541,10 @@ const PET_RADIUS = 40;
  *
  * When onDropOnTray is given, releasing over #tray skips the spot-snap entirely and
  * fires that instead — used to let the food bowl be dragged back to the tray.
+ *
+ * When isBlocked is given and returns true, the whole gesture is ignored from
+ * pointerdown on — used to keep a mid-animation cat from being tapped or dragged
+ * until it settles into a stable pose (see the `animating` flag).
  */
 function attachSceneDrag(
   el: HTMLElement,
@@ -532,11 +554,13 @@ function attachSceneDrag(
   onPetStart?: () => void,
   onPetEnd?: () => void,
   positionForSpot: (el: HTMLElement, spotId: string) => void = positionAtSpot,
-  onDropOnTray?: () => void
+  onDropOnTray?: () => void,
+  isBlocked?: () => boolean
 ) {
   const dragThreshold = onPetStart ? PET_RADIUS : TAP_THRESHOLD;
 
   el.addEventListener("pointerdown", (e) => {
+    if (isBlocked?.()) return;
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
     el.classList.remove("settling");
@@ -696,7 +720,17 @@ window.tobyDebug = {
 
 async function init() {
   traySourceEl.style.backgroundImage = `url(${bowlFullSrc})`;
-  attachSceneDrag(catEl, moveCat, handleCatTap, showPickupTransition, onCatPetStart, onCatPetEnd);
+  attachSceneDrag(
+    catEl,
+    moveCat,
+    handleCatTap,
+    showPickupTransition,
+    onCatPetStart,
+    onCatPetEnd,
+    positionAtSpot,
+    undefined,
+    () => animating
+  );
   attachTraySource(traySourceEl);
   muteToggleEl.addEventListener("click", toggleMute);
   renderMuteButton();
