@@ -35,7 +35,11 @@ websockets/polling infrastructure for real-time sync.
 Two persistent stats, each `0–100`, simulated continuously against wall-clock time (not
 "ticks while a tab is open"). Every time the client fetches state, the server first
 applies decay for elapsed time since `updated_at`, persists the result, then returns it.
-No cron job needed.
+No cron job is needed for the simulation itself — decay is purely a function of elapsed
+time since `updated_at`, so it's just as correct computed lazily on request as on a
+timer. The hunger-notification scheduler (§12) does add a real background timer to the
+process, but only to decide when to *notify*, not to keep the simulation itself
+correct.
 
 - **Hunger** — `0` (full) to `100` (starving). Rises **+5/hour**. Each bite (§5) drops
   it by a fixed amount (`-30`), floored at 0 — a fresh bowl is three bites, so a
@@ -245,8 +249,10 @@ short beat to actually let the reading sink in — he wanders off to a random ot
 never walks *onto* the scale on his own (above). The readout (and the verdict bubble)
 stay up for a few seconds even after he's left, so nobody has to read them mid-stride.
 This is purely a display, layered client-side on top of the shared `weight` stat — it
-doesn't change how weight is simulated (§3), and is a first step toward replacing the
-top-of-screen weight bar with this as the primary way to check in on his weight.
+doesn't change how weight is simulated (§3). It's also now the *only* way to check
+in on his weight: the header no longer has a running weight bar next to hunger, on the
+theory that a real cat's weight isn't something you eyeball continuously either — you
+put him on the scale. Hunger keeps its always-visible bar; weight doesn't.
 
 **Wandering while unwatched**: besides moves the player makes directly, `cat_spot` can
 also change server-side on its own — a chance, scaled by elapsed wall-clock time the
@@ -265,10 +271,8 @@ absolutely positioned DOM elements rather than canvas — one character and one 
 over a static background is still cheap enough that DOM+CSS is simpler to build and
 art-direct than a canvas renderer.
 
-No push notifications for v1. The in-game "stirs and meows more when hungry" behavior
-(§4) is the only nudge; checking in is opportunistic, which keeps the backend free of
-push-subscription infrastructure. (Worth revisiting later if check-ins turn out to be
-too infrequent in practice.)
+Beyond the in-game "stirs and meows more when hungry" behavior (§4), a real phone
+notification nudges you back in when he's been very hungry for a while — see §12.
 
 **Sound**: a meow plays on deliberate player actions (tapping the cat), and a purr
 plays when he's successfully fed. The passive cosmetic stir and the silent self-wake
@@ -351,7 +355,6 @@ Ideas worth keeping in mind but deliberately deferred:
 
 - Old food needs to be cleared before we can feed
 - "Resource management" - shopping and boiling food. Different kinds of food
-- Push notifications / reminders
 - Day/night cycle
 - History graph of hunger/weight over time
 
@@ -367,3 +370,31 @@ Not design decisions so much as numbers to adjust after actually playing with it
   chance (§6)
 - Exact spot pixel coordinates as the background art gets refined (§6)
 - The `2.00–5.00 kg` display range the scale readout maps the weight stat onto (§6)
+- The hunger-notification check interval and renotify interval (§12)
+
+## 12. Hunger Notifications
+
+A real phone notification (Web Push) when he's been very hungry for a while, so
+whoever's around gets pulled back in with some regularity — the async, no-accounts
+model (§2) means nobody's watching continuously, and the in-game stir/meow cues (§4)
+only help if someone already has the tab open.
+
+Opt-in per device via a bell toggle in the header, next to the mute toggle — no
+accounts, so a subscription is just a row keyed by the browser's own Push API
+`endpoint` URL. Unlike the mute toggle, its on/off state is never cached in
+`localStorage`; it's read live from the browser's actual subscription each load, since
+permission can be revoked from outside the page (browser or OS settings) and a cached
+flag would go stale.
+
+Server-side, a background timer (independent of any tab being open — the whole point of
+push) checks hunger on a fixed interval: the first time he crosses `VERY_HUNGRY_THRESHOLD`
+(§3) it notifies immediately, then keeps renotifying on a fixed cadence for as long as
+he stays above it and unfed, then goes quiet again the moment he's fed back down —
+which also resets the timer, so the *next* hungry episode notifies immediately again
+rather than waiting out a stale interval. The "last notified" timestamp lives on the
+single shared `game_state` row rather than per-subscription — one shared clock, same as
+hunger/weight themselves, so feeding him from either phone quiets notifications on both.
+
+This is the one deliberate exception to §3's "no cron job needed": the simulation
+itself still only needs lazy on-request decay, but *deciding when to notify* requires
+something checking in the background regardless of whether anyone's looking.

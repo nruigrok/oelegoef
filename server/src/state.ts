@@ -43,6 +43,10 @@ const FEED_WEIGHT_GAIN = 3;
 // state fetch (a new page load), never on an already-open tab's periodic poll, so
 // nobody sees him teleport live — see getDecayedState().
 const WANDER_CHANCE_PER_HOUR = 0.15;
+// Mirrors client/src/main.ts's VERY_HUNGRY_THRESHOLD (design.md §3) — duplicated the
+// same way spot ids are (design.md §8: "not worth a shared package at this scale").
+// Used server-side by push.ts to decide when to notify.
+export const VERY_HUNGRY_THRESHOLD = 70;
 
 const clamp = (value: number, min = 0, max = 100) =>
   Math.min(max, Math.max(min, value));

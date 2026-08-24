@@ -48,6 +48,20 @@ export const api = {
       method: "POST",
     }),
 
+  getPushPublicKey: () => request<{ publicKey: string }>("/api/push/vapid-public-key"),
+
+  pushSubscribe: (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    request<{ ok: true }>("/api/push/subscribe", {
+      method: "POST",
+      body: JSON.stringify(subscription),
+    }),
+
+  pushUnsubscribe: (endpoint: string) =>
+    request<{ ok: true }>("/api/push/unsubscribe", {
+      method: "POST",
+      body: JSON.stringify({ endpoint }),
+    }),
+
   debugSet: (patch: {
     hunger?: number;
     weight?: number;

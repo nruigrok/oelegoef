@@ -27,6 +27,7 @@ body {
   gap: 1rem;
 }
 
+#notify-toggle,
 #mute-toggle {
   flex-shrink: 0;
   border: none;
@@ -35,6 +36,10 @@ body {
   line-height: 1;
   padding: 0.25rem;
   cursor: pointer;
+}
+
+#notify-toggle.hidden {
+  display: none;
 }
 
 .stat {

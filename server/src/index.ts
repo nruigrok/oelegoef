@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDecayedState, moveCat, placeFood, refillFood, eatFood, debugSetState, isValidFoodLevel } from "./state.js";
 import { isValidSpotId } from "./spots.js";
+import { getVapidPublicKey, subscribe, unsubscribe, startPushNotificationScheduler, checkAndNotify } from "./push.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
@@ -70,6 +71,45 @@ app.post("/api/debug", (req, res) => {
   );
 });
 
+app.get("/api/push/vapid-public-key", (_req, res) => {
+  res.json({ publicKey: getVapidPublicKey() });
+});
+
+app.post("/api/push/subscribe", (req, res) => {
+  const { endpoint, keys } = req.body ?? {};
+  if (typeof endpoint !== "string" || !endpoint) {
+    res.status(400).json({ error: "endpoint is required" });
+    return;
+  }
+  if (!keys || typeof keys.p256dh !== "string" || typeof keys.auth !== "string") {
+    res.status(400).json({ error: "keys.p256dh and keys.auth are required" });
+    return;
+  }
+  subscribe({ endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } });
+  res.json({ ok: true });
+});
+
+app.post("/api/push/unsubscribe", (req, res) => {
+  const { endpoint } = req.body ?? {};
+  if (typeof endpoint !== "string" || !endpoint) {
+    res.status(400).json({ error: "endpoint is required" });
+    return;
+  }
+  unsubscribe(endpoint);
+  res.json({ ok: true });
+});
+
+// Testing-only backdoor, same spirit as /api/debug above: fires the periodic
+// hunger-notification check immediately instead of waiting up to CHECK_INTERVAL_MS.
+app.post("/api/push/check-now", (_req, res) => {
+  checkAndNotify()
+    .then(() => res.json({ checked: true }))
+    .catch((err) => {
+      console.error(err);
+      res.status(500).json({ error: "check failed" });
+    });
+});
+
 // In production, the client is built into ../client/dist and served from here
 // so the whole app is a single process on a single port.
 const clientDist = path.join(__dirname, "..", "..", "client", "dist");
@@ -80,4 +120,5 @@ app.get("*", (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Toby server listening on http://localhost:${PORT}`);
+  startPushNotificationScheduler();
 });

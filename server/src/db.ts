@@ -35,6 +35,36 @@ try {
   // already has the column
 }
 
+try {
+  db.exec("ALTER TABLE game_state ADD COLUMN last_hunger_notified_at INTEGER");
+} catch {
+  // already has the column
+}
+
+// One row per subscribed device/browser — see server/src/push.ts. No accounts, so a
+// subscription is identified purely by the Push API's own unique endpoint URL.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint TEXT PRIMARY KEY,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )
+`);
+
+// The single VAPID keypair used to sign/encrypt every push, generated once on first
+// boot (see push.ts) and never rotated — browsers bind a subscription to the public
+// key it was created with, so a changed key would silently orphan every existing
+// subscription. Kept in SQLite rather than an env var since this project has no
+// dotenv/env-var infrastructure anywhere else.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS vapid_keys (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    public_key TEXT NOT NULL,
+    private_key TEXT NOT NULL
+  )
+`);
+
 const row = db.prepare("SELECT id FROM game_state WHERE id = 1").get();
 if (!row) {
   db.prepare(

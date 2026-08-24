@@ -128,10 +128,10 @@ function weightToKg(weight: number): number {
 /** Flavor verdict on the reading, per the kg thresholds design.md §6 pins down. */
 function weightVerdict(weight: number): string {
   const kg = weightToKg(weight);
-  if (kg < 3) return "Help, hij kwijt weg!";
+  if (kg < 3) return "Help, hij kwijnt weg!";
   if (kg < 4) return "Hmm, daar kan nog wel meer kip bij";
   if (kg < 4.5) return "Kijk hem toch blij zijn";
-  return "Zo, dat is best veel kat";
+  return "Zo, dat is best veel kat!";
 }
 
 function hungerTier(hunger: number): HungerTier {
@@ -147,15 +147,19 @@ const thoughtBubbleEl = document.querySelector<HTMLDivElement>("#thought-bubble"
 const traySourceEl = document.querySelector<HTMLDivElement>("#food-source")!;
 const trayEl = document.querySelector<HTMLDivElement>("#tray")!;
 const hungerFillEl = document.querySelector<HTMLDivElement>("#hunger-fill")!;
-const weightFillEl = document.querySelector<HTMLDivElement>("#weight-fill")!;
 const statusEl = document.querySelector<HTMLParagraphElement>("#status")!;
 const weightReadoutEl = document.querySelector<HTMLDivElement>("#weight-readout")!;
 const muteToggleEl = document.querySelector<HTMLButtonElement>("#mute-toggle")!;
+const notifyToggleEl = document.querySelector<HTMLButtonElement>("#notify-toggle")!;
+
+const PUSH_SUPPORTED = "serviceWorker" in navigator && "PushManager" in window;
 
 let state: GameState | null = null;
 let currentFoodEl: HTMLDivElement | null = null;
 let dragging = false;
 let muted = localStorage.getItem(MUTE_STORAGE_KEY) === "1";
+let swRegistration: ServiceWorkerRegistration | null = null;
+let pushSubscription: PushSubscription | null = null;
 let catGeneration = 0;
 let transitionTimer: ReturnType<typeof setTimeout> | undefined;
 let settleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -290,6 +294,85 @@ function toggleMute() {
   muted = !muted;
   localStorage.setItem(MUTE_STORAGE_KEY, muted ? "1" : "0");
   renderMuteButton();
+}
+
+/** Push's applicationServerKey wants raw bytes, not the base64url string the server hands back. */
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+/**
+ * Unlike the mute toggle, this button's state isn't cached in localStorage — permission
+ * can be revoked from outside the page (browser/OS settings), so the render always
+ * reflects the live pushSubscription/Notification.permission rather than a stale flag.
+ */
+function renderNotifyButton() {
+  if (!PUSH_SUPPORTED) {
+    notifyToggleEl.classList.add("hidden");
+    return;
+  }
+  if (Notification.permission === "denied") {
+    notifyToggleEl.textContent = "🔕";
+    notifyToggleEl.title = "Notifications are blocked — enable them in your browser's site settings";
+    notifyToggleEl.setAttribute("aria-label", notifyToggleEl.title);
+    return;
+  }
+  const on = pushSubscription !== null;
+  notifyToggleEl.textContent = on ? "🔔" : "🔕";
+  notifyToggleEl.title = on ? "Turn off hunger notifications" : "Get notified when Toby's very hungry";
+  notifyToggleEl.setAttribute("aria-label", notifyToggleEl.title);
+}
+
+async function initPushUI() {
+  if (!PUSH_SUPPORTED) {
+    renderNotifyButton();
+    return;
+  }
+  await navigator.serviceWorker.register("/sw.js");
+  // .ready (not the raw register() result) — subscribe()/getSubscription() need an
+  // active worker, and register() can resolve before installation finishes.
+  swRegistration = await navigator.serviceWorker.ready;
+  pushSubscription = await swRegistration.pushManager.getSubscription();
+  renderNotifyButton();
+}
+
+async function toggleNotify() {
+  if (!PUSH_SUPPORTED || !swRegistration) return;
+
+  if (pushSubscription) {
+    const endpoint = pushSubscription.endpoint;
+    await pushSubscription.unsubscribe();
+    pushSubscription = null;
+    renderNotifyButton();
+    api.pushUnsubscribe(endpoint).catch((err) => console.error(err));
+    return;
+  }
+
+  if (Notification.permission === "denied") {
+    renderNotifyButton();
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    renderNotifyButton();
+    return;
+  }
+
+  const { publicKey } = await api.getPushPublicKey();
+  const subscription = await swRegistration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+  });
+  pushSubscription = subscription;
+  renderNotifyButton();
+  const json = subscription.toJSON();
+  await api.pushSubscribe({ endpoint: json.endpoint!, keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth } });
 }
 
 /** Resting, alert-ish — reached after being set down, fed, or startled awake. Settles into deep sleep after a bit. */
@@ -637,10 +720,6 @@ function renderStats(s: GameState) {
   hungerFillEl.style.width = `${s.hunger}%`;
   hungerFillEl.classList.toggle("warn", s.hunger > HUNGRY_THRESHOLD && s.hunger <= VERY_HUNGRY_THRESHOLD);
   hungerFillEl.classList.toggle("bad", s.hunger > VERY_HUNGRY_THRESHOLD);
-
-  weightFillEl.style.width = `${s.weight}%`;
-  weightFillEl.classList.toggle("bad", s.weight < 25);
-  weightFillEl.classList.toggle("warn", s.weight > 75);
 }
 
 function renderCat(s: GameState) {
@@ -958,6 +1037,8 @@ async function init() {
   attachTraySource(traySourceEl);
   muteToggleEl.addEventListener("click", toggleMute);
   renderMuteButton();
+  notifyToggleEl.addEventListener("click", toggleNotify);
+  void initPushUI();
 
   applyServerState(await api.getState(true));
   showAsleep();
