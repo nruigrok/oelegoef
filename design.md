@@ -398,3 +398,11 @@ hunger/weight themselves, so feeding him from either phone quiets notifications 
 This is the one deliberate exception to §3's "no cron job needed": the simulation
 itself still only needs lazy on-request decay, but *deciding when to notify* requires
 something checking in the background regardless of whether anyone's looking.
+
+Each subscription also carries a `notify_after` timestamp (default: none, i.e. eligible
+immediately) that holds it out of sends entirely until that time — useful for
+onboarding a device without an immediate notification if he's already hungry. There's
+no in-app UI for this; it's set via `scripts/push-delay.mjs` against the running
+server. Because the renotify cadence above is a single shared clock, a subscription
+becoming eligible mid-cooldown waits for the next scheduled check rather than sending
+that instant.

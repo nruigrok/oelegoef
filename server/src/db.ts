@@ -65,6 +65,15 @@ db.exec(`
   )
 `);
 
+try {
+  // Epoch ms before which this subscription is held back from sends entirely — 0 (the
+  // default) means "no delay, eligible as soon as subscribed". Set manually via
+  // scripts/push-delay.mjs; there's no in-app UI for it. See push.ts's sendToAll().
+  db.exec("ALTER TABLE push_subscriptions ADD COLUMN notify_after INTEGER NOT NULL DEFAULT 0");
+} catch {
+  // already has the column
+}
+
 const row = db.prepare("SELECT id FROM game_state WHERE id = 1").get();
 if (!row) {
   db.prepare(

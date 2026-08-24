@@ -10,7 +10,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "debug": "node scripts/debug-set.mjs"
+    "debug": "node scripts/debug-set.mjs",
+    "push:delay": "node scripts/push-delay.mjs"
   },
   "dependencies": {
     "express": "^4.21.0",

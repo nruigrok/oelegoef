@@ -364,15 +364,21 @@ async function toggleNotify() {
     return;
   }
 
-  const { publicKey } = await api.getPushPublicKey();
-  const subscription = await swRegistration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
-  });
-  pushSubscription = subscription;
-  renderNotifyButton();
-  const json = subscription.toJSON();
-  await api.pushSubscribe({ endpoint: json.endpoint!, keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth } });
+  try {
+    const { publicKey } = await api.getPushPublicKey();
+    const subscription = await swRegistration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+    });
+    pushSubscription = subscription;
+    renderNotifyButton();
+    const json = subscription.toJSON();
+    await api.pushSubscribe({ endpoint: json.endpoint!, keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth } });
+  } catch (err) {
+    console.error("Push subscribe failed:", err);
+    setStatus("Couldn't enable notifications — see console for details");
+    renderNotifyButton();
+  }
 }
 
 /** Resting, alert-ish — reached after being set down, fed, or startled awake. Settles into deep sleep after a bit. */

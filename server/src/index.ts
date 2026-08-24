@@ -3,7 +3,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDecayedState, moveCat, placeFood, refillFood, eatFood, debugSetState, isValidFoodLevel } from "./state.js";
 import { isValidSpotId } from "./spots.js";
-import { getVapidPublicKey, subscribe, unsubscribe, startPushNotificationScheduler, checkAndNotify } from "./push.js";
+import {
+  getVapidPublicKey,
+  subscribe,
+  unsubscribe,
+  startPushNotificationScheduler,
+  checkAndNotify,
+  listSubscriptions,
+  setNotifyAfter,
+} from "./push.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
@@ -108,6 +116,30 @@ app.post("/api/push/check-now", (_req, res) => {
       console.error(err);
       res.status(500).json({ error: "check failed" });
     });
+});
+
+// Admin-only backdoors for scripts/push-delay.mjs, never called from the client — see
+// push.ts's sendToAll() for how notifyAfter holds a subscription back.
+app.get("/api/push/subscriptions", (_req, res) => {
+  res.json(listSubscriptions());
+});
+
+app.post("/api/push/set-notify-after", (req, res) => {
+  const { endpoint, notifyAfter } = req.body ?? {};
+  if (typeof endpoint !== "string" || !endpoint) {
+    res.status(400).json({ error: "endpoint is required" });
+    return;
+  }
+  if (typeof notifyAfter !== "number") {
+    res.status(400).json({ error: "notifyAfter must be an epoch-ms number" });
+    return;
+  }
+  const found = setNotifyAfter(endpoint, notifyAfter);
+  if (!found) {
+    res.status(404).json({ error: "no subscription with that endpoint" });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 // In production, the client is built into ../client/dist and served from here

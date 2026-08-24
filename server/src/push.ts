@@ -19,6 +19,7 @@ interface PushSubscriptionRow {
   p256dh: string;
   auth: string;
   created_at: number;
+  notify_after: number;
 }
 
 function loadOrCreateVapidKeys(): { publicKey: string; privateKey: string } {
@@ -69,8 +70,31 @@ const selectAllSubscriptions = db.prepare("SELECT * FROM push_subscriptions");
 const selectNotifiedAt = db.prepare("SELECT last_hunger_notified_at FROM game_state WHERE id = 1");
 const updateNotifiedAt = db.prepare("UPDATE game_state SET last_hunger_notified_at = @value WHERE id = 1");
 
-async function sendToAll(payload: string): Promise<void> {
+export interface SubscriptionSummary {
+  endpoint: string;
+  createdAt: number;
+  notifyAfter: number;
+}
+
+/** For scripts/push-delay.mjs — never exposed to the client. */
+export function listSubscriptions(): SubscriptionSummary[] {
   const rows = selectAllSubscriptions.all() as unknown as PushSubscriptionRow[];
+  return rows.map((row) => ({ endpoint: row.endpoint, createdAt: row.created_at, notifyAfter: row.notify_after }));
+}
+
+const updateNotifyAfter = db.prepare("UPDATE push_subscriptions SET notify_after = @notifyAfter WHERE endpoint = @endpoint");
+
+/** For scripts/push-delay.mjs — holds one subscription back from sends until notifyAfter. Returns whether a matching subscription was found. */
+export function setNotifyAfter(endpoint: string, notifyAfter: number): boolean {
+  const result = updateNotifyAfter.run({ endpoint, notifyAfter });
+  return result.changes > 0;
+}
+
+async function sendToAll(payload: string): Promise<void> {
+  const now = Date.now();
+  const rows = (selectAllSubscriptions.all() as unknown as PushSubscriptionRow[]).filter(
+    (row) => row.notify_after <= now
+  );
   await Promise.all(
     rows.map(async (row) => {
       try {
