@@ -96,6 +96,20 @@ const WANDER_ON_POKE_CHANCE = 0.33;
 // Chance a hungry-enough cat waking up with food elsewhere goes and finds it instead
 // of just settling — see tryWanderTowardFood().
 const WANDER_TO_FOOD_CHANCE = 0.4;
+// While veryHungry, the ordinary ambient rolls (STIR/SELF_WAKE/AMBIENT_SOUND above) are
+// bypassed in favor of these much higher, hunger-tier-gated ones — see startAmbientBehavior().
+// The game wants to be naggy about a cat left very hungry and unattended (design.md §4).
+const VERY_HUNGRY_STIR_CHANCE = 0.3;
+const VERY_HUNGRY_MEOW_CHANCE = 0.25;
+// Chance a very hungry cat, having just eaten one bite on noticing food unprompted,
+// goes for a second one on his own — never a third; eating the whole bowl unprompted
+// should be the exception, not the routine. Beyond this, only a poke or a fresh drag
+// gets him to eat more. See eatFood()/design.md §4.
+const VERY_HUNGRY_SECOND_BITE_CHANCE = 0.3;
+// Sound on pickup (showPickupTransition): always one of meow/purr, weighted by whether
+// he was asleep — mostly startled meows off a nap, an even split while already awake.
+const PICKUP_AWAKE_MEOW_CHANCE = 0.5;
+const PICKUP_ASLEEP_MEOW_CHANCE = 0.85;
 
 // Hunger tiers driving eating behavior — see design.md §3/§4. Boundaries match the
 // hunger-bar warn/bad colors in renderStats() so the bar always reflects the tier.
@@ -147,6 +161,7 @@ const thoughtBubbleEl = document.querySelector<HTMLDivElement>("#thought-bubble"
 const traySourceEl = document.querySelector<HTMLDivElement>("#food-source")!;
 const trayEl = document.querySelector<HTMLDivElement>("#tray")!;
 const hungerFillEl = document.querySelector<HTMLDivElement>("#hunger-fill")!;
+const gramsInfoEl = document.querySelector<HTMLDivElement>("#grams-info")!;
 const statusEl = document.querySelector<HTMLParagraphElement>("#status")!;
 const weightReadoutEl = document.querySelector<HTMLDivElement>("#weight-readout")!;
 const muteToggleEl = document.querySelector<HTMLButtonElement>("#mute-toggle")!;
@@ -381,7 +396,7 @@ async function toggleNotify() {
   }
 }
 
-/** Resting, alert-ish — reached after being set down, fed, or startled awake. Settles into deep sleep after a bit. */
+/** Resting, alert-ish — reached after being set down, fed, or startled awake. Settles into deep sleep after a bit, unless he's very hungry, in which case he stays resting (design.md §4) — see scheduleDriftOff(). */
 function showLyingDown() {
   catGeneration++;
   animating = false;
@@ -390,7 +405,20 @@ function showLyingDown() {
   catEl.style.backgroundImage = `url(${catLyingdownSrc})`;
   resetPoseClasses();
   catEl.title = "Pet him!";
-  settleTimer = setTimeout(() => showDriftOffTransition(showAsleep), LYINGDOWN_HOLD_MS);
+  scheduleDriftOff();
+}
+
+/** Re-checked every LYINGDOWN_HOLD_MS rather than firing once: a very hungry cat keeps
+ * deferring the drift-off-to-sleep indefinitely instead of ever reaching ASLEEP. */
+function scheduleDriftOff() {
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => {
+    if (hungerTier(state?.hunger ?? 0) === "veryHungry") {
+      scheduleDriftOff();
+      return;
+    }
+    showDriftOffTransition(showAsleep);
+  }, LYINGDOWN_HOLD_MS);
 }
 
 /** Deep sleep — ~99% of the game. Only exited by a tap (startled) or a drag (picked up). */
@@ -431,6 +459,12 @@ function showPickupTransition() {
   animating = true;
   clearTimeout(transitionTimer);
   clearTimeout(settleTimer);
+  const meowChance = catEl.classList.contains("asleep") ? PICKUP_ASLEEP_MEOW_CHANCE : PICKUP_AWAKE_MEOW_CHANCE;
+  if (Math.random() < meowChance) {
+    playMeow();
+  } else {
+    playSound(purrSound);
+  }
   catEl.style.backgroundImage = `url(${pickedUpGif})`;
   resetPoseClasses();
   transitionTimer = setTimeout(showDraggedCat, PICKUP_DURATION_MS);
@@ -518,7 +552,7 @@ function selfFeedsAtTier(tier: HungerTier) {
 function resolveFoodDecision() {
   const tier = hungerTier(state?.hunger ?? 0);
   if (selfFeedsAtTier(tier)) {
-    void eatFood();
+    void eatFood({ auto: true });
   } else {
     showNopeTransition();
   }
@@ -541,11 +575,14 @@ function showNopeTransition() {
  * after it, so a slow response can't stall the gif — whichever finishes last, the two
  * are joined before he settles back down.
  *
- * If he's still very hungry afterward and the bowl isn't empty, he keeps going —
- * that's what makes a "very hungry" cat polish off the whole bowl unattended, per
+ * `auto` marks a bite that happened without a poke (i.e. he noticed the food himself,
+ * see resolveFoodDecision()) — only that path ever chains into a second bite on its
+ * own (VERY_HUNGRY_SECOND_BITE_CHANCE, and never a third), so eating the whole bowl
+ * unprompted stays rare; a poke (tryPokeToEat(), auto unset) always eats exactly one
+ * bite per tap, same as before — poking or dragging is how you get more into him. See
  * design.md §4/§5.
  */
-async function eatFood() {
+async function eatFood(opts: { auto?: boolean; isSecondAutoBite?: boolean } = {}) {
   catGeneration++;
   animating = true;
   clearTimeout(transitionTimer);
@@ -559,10 +596,15 @@ async function eatFood() {
   applyServerState(result.state);
   if (result.fed) {
     playSound(purrSound);
-    setStatus("Toby ate! 😋");
   }
-  if (hungerTier(result.state.hunger) === "veryHungry" && result.state.foodLevel !== "empty") {
-    void eatFood();
+  if (
+    opts.auto &&
+    !opts.isSecondAutoBite &&
+    hungerTier(result.state.hunger) === "veryHungry" &&
+    result.state.foodLevel !== "empty" &&
+    Math.random() < VERY_HUNGRY_SECOND_BITE_CHANCE
+  ) {
+    void eatFood({ auto: true, isSecondAutoBite: true });
     return;
   }
   settleOrWander();
@@ -722,10 +764,17 @@ function handleCatTap() {
   }
 }
 
+function gramsSpan(grams: number): string {
+  const color = grams <= 120 ? "red" : grams < 200 ? "orange" : "green";
+  return `<span class="gram-amount ${color}">${grams}g</span>`;
+}
+
 function renderStats(s: GameState) {
   hungerFillEl.style.width = `${s.hunger}%`;
   hungerFillEl.classList.toggle("warn", s.hunger > HUNGRY_THRESHOLD && s.hunger <= VERY_HUNGRY_THRESHOLD);
   hungerFillEl.classList.toggle("bad", s.hunger > VERY_HUNGRY_THRESHOLD);
+  gramsInfoEl.innerHTML =
+    `Vandaag: ${gramsSpan(s.gramsToday)}; gisteren: ${gramsSpan(s.gramsYesterday)}`;
 }
 
 function renderCat(s: GameState) {
@@ -767,7 +816,7 @@ function renderFood(s: GameState) {
     sceneEl.appendChild(currentFoodEl);
     attachSceneDrag(
       currentFoodEl,
-      placeFood,
+      moveFood,
       undefined,
       undefined,
       undefined,
@@ -799,6 +848,11 @@ async function moveCat(spotId: string) {
 
 async function placeFood(spotId: string) {
   applyServerState(await api.placeFood(spotId));
+  checkForFood();
+}
+
+async function moveFood(spotId: string) {
+  applyServerState(await api.moveFood(spotId));
   checkForFood();
 }
 
@@ -969,7 +1023,15 @@ function startAmbientBehavior() {
   setInterval(() => {
     if (dragging || !state || animating) return;
 
+    const veryHungry = hungerTier(state.hunger) === "veryHungry";
+
     if (catEl.classList.contains("asleep")) {
+      // A very hungry cat doesn't get to roll for it — he's forced awake outright, per
+      // design.md §4.
+      if (veryHungry) {
+        showStartledTransition();
+        return;
+      }
       const wakeChance = SELF_WAKE_BASE_CHANCE + (state.hunger / 100) * SELF_WAKE_HUNGER_WEIGHT;
       if (Math.random() < wakeChance) {
         showStartledTransition();
@@ -980,6 +1042,20 @@ function startAmbientBehavior() {
         catEl.classList.add("stirring");
         showThought("Zzz...");
         setTimeout(() => catEl.classList.remove("stirring"), 400);
+      }
+      return;
+    }
+
+    // Resting awake: a very hungry cat is restless (frequent wiggle) and meows with
+    // some regularity instead of the low-frequency ordinary ambient roll below.
+    if (veryHungry) {
+      if (Math.random() < VERY_HUNGRY_STIR_CHANCE) {
+        catEl.classList.add("stirring");
+        setTimeout(() => catEl.classList.remove("stirring"), 400);
+      }
+      if (Math.random() < VERY_HUNGRY_MEOW_CHANCE) {
+        playMeow();
+        showThought("Ik heb honger!");
       }
       return;
     }
@@ -1012,6 +1088,9 @@ declare global {
         catSpot?: string;
         foodSpot?: string | null;
         foodLevel?: FoodLevel;
+        gramsToday?: number;
+        gramsYesterday?: number;
+        updatedAt?: number;
       }): Promise<GameState>;
     };
   }
@@ -1047,7 +1126,15 @@ async function init() {
   void initPushUI();
 
   applyServerState(await api.getState(true));
-  showAsleep();
+  // A very hungry cat is never found ASLEEP (design.md §4) — greet the player with an
+  // immediate meow instead of the usual silent asleep start.
+  if (hungerTier(state?.hunger ?? 0) === "veryHungry") {
+    settleIntoLyingDown();
+    playMeow();
+    showThought("Eindelijk! Ik heb honger!");
+  } else {
+    showAsleep();
+  }
 
   startAmbientBehavior();
   startPeriodicSync();

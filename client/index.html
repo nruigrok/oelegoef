@@ -12,8 +12,14 @@
     <div id="app">
       <header id="stats">
         <div class="stat">
-          <label>Hunger</label>
-          <div class="bar"><div id="hunger-fill" class="fill"></div></div>
+          <div class="stat-row">
+            <label>Honger:</label>
+            <div class="bar"><div id="hunger-fill" class="fill"></div></div>
+          </div>
+          <div class="stat-row">
+            <label>Gegeten:</label>
+            <div id="grams-info" class="grams-info"></div>
+          </div>
         </div>
         <button id="notify-toggle" type="button" title="Get notified when Toby's very hungry" aria-label="Turn on hunger notifications">🔕</button>
         <button id="mute-toggle" type="button" title="Mute sounds" aria-label="Mute sounds">🔊</button>

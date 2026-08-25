@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Testing helper: forces hunger/weight/spots/bowl state on the running server.
-// Usage: npm run debug -w server -- --hunger 80 --weight 20 [--catSpot couch] [--foodSpot table] [--foodLevel half]
+// Testing helper: forces hunger/weight/spots/bowl/grams state on the running server.
+// Usage: npm run debug -w server -- --hunger 80 --weight 20 [--catSpot couch] [--foodSpot table] [--foodLevel half] [--gramsToday 40] [--gramsYesterday 160] [--hoursAgo 6]
 
 const args = process.argv.slice(2);
 const patch = {};
@@ -12,10 +12,14 @@ for (let i = 0; i < args.length; i++) {
   const value = args[i + 1];
   i++;
 
-  if (key === "hunger" || key === "weight") patch[key] = Number(value);
-  else if (key === "foodLevel") patch[key] = value;
+  if (key === "hunger" || key === "weight" || key === "gramsToday" || key === "gramsYesterday") {
+    patch[key] = Number(value);
+  } else if (key === "foodLevel") patch[key] = value;
   else if (key === "foodSpot") patch[key] = value === "null" ? null : value;
   else if (key === "catSpot") patch[key] = value;
+  // Backdates updatedAt so the next fresh fetch sees that many hours elapsed —
+  // useful for exercising the gap self-feed roll or a day rollover without waiting.
+  else if (key === "hoursAgo") patch.updatedAt = Date.now() - Number(value) * 60 * 60 * 1000;
   else {
     console.error(`Unknown flag --${key}`);
     process.exit(1);
@@ -24,7 +28,7 @@ for (let i = 0; i < args.length; i++) {
 
 if (Object.keys(patch).length === 0) {
   console.error(
-    "Usage: npm run debug -w server -- --hunger 80 --weight 20 [--catSpot couch] [--foodSpot table] [--foodLevel half]"
+    "Usage: npm run debug -w server -- --hunger 80 --weight 20 [--catSpot couch] [--foodSpot table] [--foodLevel half] [--gramsToday 40] [--gramsYesterday 160] [--hoursAgo 6]"
   );
   process.exit(1);
 }

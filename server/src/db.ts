@@ -41,6 +41,18 @@ try {
   // already has the column
 }
 
+try {
+  // Grams-eaten tracking (design.md §3) — day_key defaults to '' so it never matches a
+  // real calendar date, which makes the first getDecayedState() call after this
+  // migration land on the normal "day advanced" path (harmless: grams_today/yesterday
+  // default to 0 anyway on a database that predates this tracking).
+  db.exec("ALTER TABLE game_state ADD COLUMN grams_today REAL NOT NULL DEFAULT 0");
+  db.exec("ALTER TABLE game_state ADD COLUMN grams_yesterday REAL NOT NULL DEFAULT 0");
+  db.exec("ALTER TABLE game_state ADD COLUMN day_key TEXT NOT NULL DEFAULT ''");
+} catch {
+  // already has the columns
+}
+
 // One row per subscribed device/browser — see server/src/push.ts. No accounts, so a
 // subscription is identified purely by the Push API's own unique endpoint URL.
 db.exec(`

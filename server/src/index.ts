@@ -1,7 +1,7 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getDecayedState, moveCat, placeFood, refillFood, eatFood, debugSetState, isValidFoodLevel } from "./state.js";
+import { getDecayedState, moveCat, placeFood, moveFood, refillFood, eatFood, debugSetState, isValidFoodLevel } from "./state.js";
 import { isValidSpotId } from "./spots.js";
 import {
   getVapidPublicKey,
@@ -41,6 +41,15 @@ app.post("/api/place-food", (req, res) => {
   res.json(placeFood(spotId));
 });
 
+app.post("/api/move-food", (req, res) => {
+  const { spotId } = req.body ?? {};
+  if (!isValidSpotId(spotId)) {
+    res.status(400).json({ error: "spotId must be a known spot" });
+    return;
+  }
+  res.json(moveFood(spotId));
+});
+
 app.post("/api/feed", (_req, res) => {
   const { fed, state } = eatFood();
   res.json({ fed, state });
@@ -53,7 +62,7 @@ app.post("/api/refill-food", (_req, res) => {
 // Testing-only backdoor to force hunger/weight/spots/bowl state directly, e.g. to see
 // hungry/thin thresholds without waiting hours for decay. See scripts/debug-set.mjs.
 app.post("/api/debug", (req, res) => {
-  const { hunger, weight, catSpot, foodSpot, foodLevel } = req.body ?? {};
+  const { hunger, weight, catSpot, foodSpot, foodLevel, gramsToday, gramsYesterday, updatedAt } = req.body ?? {};
 
   if (catSpot !== undefined && !isValidSpotId(catSpot)) {
     res.status(400).json({ error: "catSpot must be a known spot" });
@@ -75,6 +84,11 @@ app.post("/api/debug", (req, res) => {
       catSpot,
       foodSpot,
       foodLevel,
+      gramsToday: typeof gramsToday === "number" ? gramsToday : undefined,
+      gramsYesterday: typeof gramsYesterday === "number" ? gramsYesterday : undefined,
+      // Lets a gap (elapsed time, self-feed rolls, day rollover) be simulated without
+      // waiting for real time to pass — see debugSetState()'s doc comment.
+      updatedAt: typeof updatedAt === "number" ? updatedAt : undefined,
     })
   );
 });

@@ -51,7 +51,19 @@ body {
   color: #555;
 }
 
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stat-row label {
+  flex-shrink: 0;
+  width: 4.5rem;
+}
+
 .bar {
+  flex: 1;
   height: 10px;
   border-radius: 999px;
   background: #ddd6c8;
@@ -71,6 +83,27 @@ body {
 
 .fill.bad {
   background: #e15b5b;
+}
+
+.grams-info {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.grams-info .gram-amount {
+  font-weight: 600;
+}
+
+.grams-info .gram-amount.red {
+  color: #e15b5b;
+}
+
+.grams-info .gram-amount.orange {
+  color: #f4a638;
+}
+
+.grams-info .gram-amount.green {
+  color: #7cb342;
 }
 
 #scene {

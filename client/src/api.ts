@@ -6,6 +6,8 @@ export interface GameState {
   catSpot: string;
   foodSpot: string | null;
   foodLevel: FoodLevel;
+  gramsToday: number;
+  gramsYesterday: number;
   updatedAt: number;
 }
 
@@ -34,6 +36,12 @@ export const api = {
 
   placeFood: (spotId: string) =>
     request<GameState>("/api/place-food", {
+      method: "POST",
+      body: JSON.stringify({ spotId }),
+    }),
+
+  moveFood: (spotId: string) =>
+    request<GameState>("/api/move-food", {
       method: "POST",
       body: JSON.stringify({ spotId }),
     }),
@@ -68,6 +76,9 @@ export const api = {
     catSpot?: string;
     foodSpot?: string | null;
     foodLevel?: FoodLevel;
+    gramsToday?: number;
+    gramsYesterday?: number;
+    updatedAt?: number;
   }) =>
     request<GameState>("/api/debug", {
       method: "POST",

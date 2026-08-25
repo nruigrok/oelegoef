@@ -42,16 +42,32 @@ process, but only to decide when to *notify*, not to keep the simulation itself
 correct.
 
 - **Hunger** — `0` (full) to `100` (starving). Rises **+5/hour**. Each bite (§5) drops
-  it by a fixed amount (`-30`), floored at 0 — a fresh bowl is three bites, so a
+  it by a fixed amount (`-24`), floored at 0 — a fresh bowl is three bites, so a
   genuinely starving cat working through the whole thing in one sitting drops by up to
-  `-90`, rather than resetting to 0 in one go.
+  `-72`, rather than resetting to 0 in one go.
 - **Weight** — `0` (too thin) to `100`, healthy band roughly `40–60`. Decays
-  **-0.5/hour** on its own (metabolism/age — mirrors "he loses weight unless he eats").
-  Each bite adds a flat **+3**, capped at 100.
+  **-0.278/hour** on its own (metabolism/age — mirrors "he loses weight unless he
+  eats"). Each bite adds a flat **+1.33**, capped at 100.
+
+Both stats are pinned to real grams of chicken (see §5): a bite is **40g**, three per
+120g bowl, and the cat needs **200g/day**. Weight gain-per-bite and weight decay-per-hour
+are both expressed via the same conversion — **30g = 1 weight unit** (from the
+`2.00–5.00 kg` scale display range, §6: 3kg spread over the 0–100 stat) — so eating
+exactly 200g/day exactly cancels a day of decay: true metabolic equilibrium sits at
+*literally* 200g/day, not just approximately. Likewise, `FEED_HUNGER_DROP` (24) is
+picked so a full day's worth of organically-rising hunger (24h × 5/hour = 120) is
+exactly discharged by 5 bites (200g) — "hunger fully managed" and "200g/day eaten"
+describe the same thing.
 
 These numbers are starting proposals, easy to retune after playtesting — the point is
 the shape: weight trends down over roughly a week without feeding, hunger becomes
-noticeable within a day, matching a "check in every several hours" cadence.
+noticeable within a day, matching a "check in every several hours" cadence, and —
+central to the feeding loop — the three natural playstyles land in different places:
+only feeding reactively (around the hungry notification, §12) nets a calorie deficit and
+slow weight loss; keeping the bowl stocked without actively encouraging him to eat nets
+roughly maintenance; actively topping him up (poking, refilling more often) nets a
+surplus and weight gain. See §6 for how "roughly maintenance" is made to actually work
+even when the app is mostly closed between visits.
 
 Hunger tiers drive both the hunger-bar color and how he behaves around food (§4):
 
@@ -60,7 +76,7 @@ Hunger tiers drive both the hunger-bar color and how he behaves around food (§4
 | 0–15 | Not hungry — won't eat, even offered directly | (normal) |
 | 15–40 | Not very hungry — won't eat on his own, but will if poked | (normal) |
 | 40–70 | Hungry — eats one bite on noticing food, then stops; a poke gets him another | warn |
-| 70–100 | Very hungry — eats on his own, repeatedly, until no longer very hungry or the bowl's empty | bad |
+| 70–100 | Very hungry — eats a bite on noticing food; a chance of a second on his own, but never a third without a poke | bad |
 
 | Weight | State |
 |---|---|
@@ -113,14 +129,19 @@ briefly as if considering it, then resolves deterministically by hunger tier (§
 hungry or hungry eats a bite (§5); not very hungry or not hungry turns it down (a
 "nope" animation) — before settling back to `SITTING` (not `LYINGDOWN` — from there he
 follows the normal `SITTING` hold timer down). The food stays exactly where it was
-either way.
+either way. If he's still very hungry after that first bite and the bowl isn't empty,
+there's a chance (`VERY_HUNGRY_SECOND_BITE_CHANCE`) he goes for a second one on his own
+— but never a third; eating a whole bowl unprompted is meant to be the exception, not
+the routine (§5).
 
 **Poking for a bite**: tapping him while awake (`LYINGDOWN` or `SITTING`) and sitting
 next to non-empty food is a separate check from noticing, and takes priority over the
 tap's usual effect (waking/sitting up) — it always resolves to either an eating or a
 "nope" animation instead. A not-hungry cat still turns it down; every other tier eats a
-bite, which is how a hungry cat (limited to one automatic bite on noticing) or a not
-very hungry one (no automatic bite at all) can be topped up deliberately.
+bite, which is how a hungry or very hungry cat (both limited to one, or occasionally
+two, automatic bites on noticing) or a not very hungry one (no automatic bite at all)
+can be topped up deliberately — poking (or dragging fresh food to him) is the reliable
+way to get more into him beyond what he'll take on his own.
 
 **Wandering**: three different moments each carry the same chance of sending him off to
 a different, random spot instead of settling where he is — a poke that isn't about food
@@ -182,6 +203,19 @@ meow to himself with a matching thought bubble — flavor only, no effect on any
 Unlike the silent self-wake and the silent cosmetic stir, this one does make noise; see
 §7 for why that's still consistent with keeping an open tab from being noisy.
 
+**Very hungry override**: while his hunger tier is `veryHungry` (§3), the ambient timer
+above is short-circuited rather than just reweighted — he doesn't get a chance to stay
+asleep or drift back off to `ASLEEP` at all. Checked `ASLEEP` is forced straight into the
+startled-awake transition every tick instead of rolling `SELF_WAKE`; resting `LYINGDOWN`
+defers its usual drift-off-to-sleep timer for as long as he stays very hungry, instead
+resettling into `LYINGDOWN` indefinitely. The same tick also makes him visibly restless
+(the cosmetic wiggle, at a much higher rate than the asleep stir) and meows with some
+regularity, each with its own matching thought bubble — a much shorter average cadence
+than the ordinary ambient purr/meow above, since a very hungry, unattended cat is the
+one case the game deliberately wants to be naggy about. Loading the page while he's
+already very hungry greets the player with an immediate meow instead of the usual silent
+`ASLEEP` start (§9).
+
 ## 5. Feeding Interaction
 
 1. A food bowl sits in a small supply tray in the UI, always available — no
@@ -195,13 +229,16 @@ Unlike the silent self-wake and the silent cosmetic stir, this one does make noi
    — both directions work, mirroring "we pick him up and set him in front of the
    chicken, or pick up the chicken and set it in front of him." Dragging snaps to a
    spot the same way.
-4. A fresh bowl holds three bites, drawn down one level per bite through four sprites
-   — `full → half → almostempty → empty` — rather than disappearing or resetting; it
-   stays exactly where it was placed regardless of level. When the cat's spot and the
-   food's spot match and the cat is awake, whether and how many bites he takes is
-   governed by his hunger tier and pokes (§4): an eating animation plays per bite,
-   hunger drops and weight ticks up per §3 each time; a decline plays a "nope"
-   animation and leaves the level untouched.
+4. A fresh bowl holds three bites, **40g each (120g total)** — the cat needs roughly
+   **200g/day** (§3) — drawn down one level per bite through four sprites — `full →
+   half → almostempty → empty` — rather than disappearing or resetting; it stays
+   exactly where it was placed regardless of level. When the cat's spot and the food's
+   spot match and the cat is awake, whether and how many bites he takes is governed by
+   his hunger tier and pokes (§4): an eating animation plays per bite, hunger drops and
+   weight ticks up per §3 each time; a decline plays a "nope" animation and leaves the
+   level untouched. Grams eaten are tracked per calendar day (`gramsToday`/
+   `gramsYesterday`, §8) and shown in the header, so the player can see at a glance
+   whether he's on track for the day.
 5. Dragging the bowl (any level) back onto the tray returns it there and refills it to
    full, ready to be placed again.
 
@@ -264,6 +301,24 @@ only ever have moved *between* visits, the same way a real cat wanders off while
 not in the room. See §4 for the other half of this (a poke-triggered version, animated
 client-side).
 
+**Self-feeding while unwatched**: the in-game "notices food and eats" behavior (§4) is
+otherwise entirely client-side, driven by a timer that only runs while a tab is open —
+so on its own, leaving a bowl out and closing the app would never get eaten from, no
+matter how long the gap, which defeats "keep food available" as a real passive
+strategy for someone mostly checking in from a phone (§3). To fix this, the same
+fresh-load reconciliation that rolls the wander chance above also rolls a chance he
+found and ate from an available bowl at some point during the gap — a single trial
+scaled by elapsed hours and current hunger, same reasoning as the wander roll (he either
+found it once during the gap or he didn't, not modeled as multiple discrete visits),
+only possible once he's at least "hungry" (§3) and only if food is out and non-empty. If
+it resolves, it takes 1 bite, with a chance of a 2nd — capped there, same as the
+in-session noticing behavior (§4): a whole bowl going unprompted, even across an
+unattended gap, should stay rare. It applies the usual hunger/weight/grams effect per
+bite (§3), and repositions him at the bowl's spot before the wander roll runs — so he
+can still end up somewhere else afterward, same as after a deliberate feed (§4). Both
+rolls only ever fire on a fresh load, for the same reason: nobody watching an open tab
+should see him suddenly have eaten.
+
 A single illustrated background image (the room from §6, furniture included), a cat
 sprite, a food bowl sprite (full/half/almostempty/empty). Animation via a small hand-drawn sprite sheet
 per cat state (asleep, stirring/meow, idle, walk, eat) stepped with CSS, rendered as
@@ -295,13 +350,23 @@ build can lag behind the newest Node versions.
 Single-row table `game_state`:
 
 ```
-hunger      REAL
-weight      REAL
-cat_spot    TEXT
-food_spot   TEXT NULLABLE
-food_level  TEXT   -- one of full / half / almostempty / empty
-updated_at  TIMESTAMP
+hunger          REAL
+weight          REAL
+cat_spot        TEXT
+food_spot       TEXT NULLABLE
+food_level      TEXT   -- one of full / half / almostempty / empty
+grams_today     REAL   -- grams eaten so far on day_key's calendar date
+grams_yesterday REAL   -- grams eaten on the day before that
+day_key         TEXT   -- local calendar date (YYYY-MM-DD) grams_today covers
+updated_at      TIMESTAMP
 ```
+
+`day_key` is compared against the current calendar date lazily, the same way
+`updated_at` drives decay (§3) — no cron job needed here either: a fresh calculation
+just rolls `grams_today` into `grams_yesterday` (or to 0, if more than one day has
+passed unattended) whenever the date has moved on since the last update. This is a
+narrow stat-tracking addition, not the "day/night cycle" idea listed as out of scope for
+v1 (§10) — no in-game behavior changes based on time of day.
 
 `cat_spot`/`food_spot` hold one of the spot ids from §6 (e.g. `"couch"`). The set of
 valid spot ids is small and hand-authored, duplicated as a plain list in both the
@@ -362,12 +427,20 @@ Ideas worth keeping in mind but deliberately deferred:
 
 Not design decisions so much as numbers to adjust after actually playing with it:
 
-- Hunger rise rate, feed amount, weight decay/gain rate (§3)
-- Hunger tier thresholds (15/40/70) and bites per bowl (currently 3) (§3/§5)
+- Hunger rise rate, feed amount, weight decay/gain rate (§3) — currently anchored to
+  200g/day as the literal maintenance target, with 30g = 1 weight unit
+- Hunger tier thresholds (15/40/70) and bites per bowl (currently 3, 40g each) (§3/§5)
 - Stir/self-wake frequency curve vs. hunger, and the ambient purr/meow rate (§4)
 - Wander chance (§4, shared by the poke/eat/decline triggers), the separate
   wander-to-food-on-waking chance (§4), and the wandering-while-unwatched per-hour
   chance (§6)
+- The gap self-feed chance/hunger-weighting and second-bite chance (§6) — this is what
+  "keep food available, don't poke" actually nets per day in practice, and is the main
+  lever if that playstyle needs to land closer to true maintenance
+- `VERY_HUNGRY_SECOND_BITE_CHANCE` (client) and its server-side mirror
+  `GAP_SELF_FEED_SECOND_BITE_CHANCE` (§4/§6) — how often a very hungry cat takes a
+  second unprompted bite; both are hard-capped at 2 bites, never 3, by design rather
+  than just tuned low
 - Exact spot pixel coordinates as the background art gets refined (§6)
 - The `2.00–5.00 kg` display range the scale readout maps the weight stat onto (§6)
 - The hunger-notification check interval and renotify interval (§12)
