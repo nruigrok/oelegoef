@@ -53,7 +53,6 @@ for (const src of [
 
 const MEOW_SOUNDS = [meowSound1, meowSound2, meowSound3];
 const SOUND_VOLUME = 0.6;
-const MUTE_STORAGE_KEY = "toby-muted";
 // Frozen to southeast for now — alternating with a southwest/flip was popping at odd
 // moments (transition vs. static facing not always agreeing). Revisit later (design.md §7).
 const PICKUP_DURATION_MS = 340;
@@ -164,7 +163,6 @@ const hungerFillEl = document.querySelector<HTMLDivElement>("#hunger-fill")!;
 const gramsInfoEl = document.querySelector<HTMLDivElement>("#grams-info")!;
 const statusEl = document.querySelector<HTMLParagraphElement>("#status")!;
 const weightReadoutEl = document.querySelector<HTMLDivElement>("#weight-readout")!;
-const muteToggleEl = document.querySelector<HTMLButtonElement>("#mute-toggle")!;
 const notifyToggleEl = document.querySelector<HTMLButtonElement>("#notify-toggle")!;
 
 const PUSH_SUPPORTED = "serviceWorker" in navigator && "PushManager" in window;
@@ -172,7 +170,6 @@ const PUSH_SUPPORTED = "serviceWorker" in navigator && "PushManager" in window;
 let state: GameState | null = null;
 let currentFoodEl: HTMLDivElement | null = null;
 let dragging = false;
-let muted = localStorage.getItem(MUTE_STORAGE_KEY) === "1";
 let swRegistration: ServiceWorkerRegistration | null = null;
 let pushSubscription: PushSubscription | null = null;
 let catGeneration = 0;
@@ -266,7 +263,6 @@ function hideThought() {
 }
 
 function playSound(src: string) {
-  if (muted) return;
   const audio = new Audio(src);
   audio.volume = SOUND_VOLUME;
   void audio.play().catch(() => {});
@@ -278,7 +274,6 @@ function playMeow() {
 
 function startPurrLoop() {
   stopPurrLoop();
-  if (muted) return;
   purrLoopAudio = new Audio(purrSound);
   purrLoopAudio.loop = true;
   purrLoopAudio.volume = SOUND_VOLUME;
@@ -300,17 +295,6 @@ function onCatPetEnd() {
   hideThought();
 }
 
-function renderMuteButton() {
-  muteToggleEl.textContent = muted ? "🔇" : "🔊";
-  muteToggleEl.setAttribute("aria-label", muted ? "Unmute sounds" : "Mute sounds");
-}
-
-function toggleMute() {
-  muted = !muted;
-  localStorage.setItem(MUTE_STORAGE_KEY, muted ? "1" : "0");
-  renderMuteButton();
-}
-
 /** Push's applicationServerKey wants raw bytes, not the base64url string the server hands back. */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -322,9 +306,9 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 /**
- * Unlike the mute toggle, this button's state isn't cached in localStorage — permission
- * can be revoked from outside the page (browser/OS settings), so the render always
- * reflects the live pushSubscription/Notification.permission rather than a stale flag.
+ * This button's state isn't cached in localStorage — permission can be revoked from
+ * outside the page (browser/OS settings), so the render always reflects the live
+ * pushSubscription/Notification.permission rather than a stale flag.
  */
 function renderNotifyButton() {
   if (!PUSH_SUPPORTED) {
@@ -1120,8 +1104,6 @@ async function init() {
     () => animating
   );
   attachTraySource(traySourceEl);
-  muteToggleEl.addEventListener("click", toggleMute);
-  renderMuteButton();
   notifyToggleEl.addEventListener("click", toggleNotify);
   void initPushUI();
 

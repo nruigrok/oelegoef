@@ -27,8 +27,7 @@ body {
   gap: 1rem;
 }
 
-#notify-toggle,
-#mute-toggle {
+#notify-toggle {
   flex-shrink: 0;
   border: none;
   background: none;
