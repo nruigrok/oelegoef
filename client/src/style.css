@@ -253,6 +253,12 @@ body {
   padding: 0.5rem;
   border: 2px dashed #ccc;
   border-radius: 12px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+#tray.drop-target {
+  border-color: #7cb342;
+  background-color: rgba(124, 179, 66, 0.12);
 }
 
 #food-source {

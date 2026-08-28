@@ -894,6 +894,15 @@ function attachSceneDrag(
     let petting = false;
     let wasPet = false;
 
+    let trayGhost: HTMLElement | null = null;
+
+    const removeTrayGhost = () => {
+      trayGhost?.remove();
+      trayGhost = null;
+      el.style.visibility = "";
+      trayEl.classList.remove("drop-target");
+    };
+
     const onMove = (ev: PointerEvent) => {
       const distance = Math.hypot(ev.clientX - startX, ev.clientY - startY);
       if (!confirmedDrag && distance > dragThreshold) {
@@ -909,8 +918,34 @@ function attachSceneDrag(
         onPetStart();
       }
       if (!confirmedDrag) return;
-      const { x, y } = clientToScenePercent(ev.clientX, ev.clientY);
-      positionAt(el, x, y);
+      const sceneRect = sceneEl.getBoundingClientRect();
+      if (onDropOnTray && ev.clientY > sceneRect.bottom) {
+        if (!trayGhost) {
+          trayGhost = document.createElement("div");
+          Object.assign(trayGhost.style, {
+            position: "fixed",
+            width: "30px",
+            height: "30px",
+            backgroundImage: el.style.backgroundImage,
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "center",
+            backgroundSize: "contain",
+            imageRendering: "pixelated",
+            pointerEvents: "none",
+            transform: "translate(-50%, -50%)",
+            zIndex: "1000",
+          });
+          document.body.appendChild(trayGhost);
+          el.style.visibility = "hidden";
+        }
+        trayGhost.style.left = `${ev.clientX}px`;
+        trayGhost.style.top = `${ev.clientY}px`;
+        trayEl.classList.add("drop-target");
+      } else {
+        removeTrayGhost();
+        const { x, y } = clientToScenePercent(ev.clientX, ev.clientY);
+        positionAt(el, x, y);
+      }
     };
 
     const onEnd = (ev: PointerEvent) => {
@@ -920,6 +955,7 @@ function attachSceneDrag(
       el.removeEventListener("pointercancel", onEnd);
       el.classList.remove("dragging");
       dragging = false;
+      removeTrayGhost();
 
       if (petting) {
         petting = false;
@@ -927,7 +963,7 @@ function attachSceneDrag(
       }
 
       if (confirmedDrag) {
-        if (onDropOnTray && isOverElement(trayEl, ev.clientX, ev.clientY)) {
+        if (onDropOnTray && !isOverElement(sceneEl, ev.clientX, ev.clientY)) {
           onDropOnTray();
           return;
         }

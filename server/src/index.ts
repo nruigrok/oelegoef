@@ -1,5 +1,6 @@
 import express from "express";
 import path from "node:path";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getDecayedState, moveCat, placeFood, moveFood, refillFood, eatFood, debugSetState, isValidFoodLevel } from "./state.js";
 import { isValidSpotId } from "./spots.js";
@@ -159,10 +160,12 @@ app.post("/api/push/set-notify-after", (req, res) => {
 // In production, the client is built into ../client/dist and served from here
 // so the whole app is a single process on a single port.
 const clientDist = path.join(__dirname, "..", "..", "client", "dist");
-app.use(express.static(clientDist));
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(clientDist, "index.html"));
-});
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`Toby server listening on http://localhost:${PORT}`);
