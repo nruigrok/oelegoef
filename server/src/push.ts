@@ -148,15 +148,23 @@ async function sendToAll(payload: string): Promise<void> {
  * (areNotificationsPaused()) — either simply skips the send; `last_hunger_notified_at`
  * is left untouched so the next eligible check sends right away rather than waiting out
  * a stale interval.
+ *
+ * `opts.force` (from /api/push/check-now?force=true) bypasses quiet hours and the
+ * renotify cooldown — for confirming end-to-end delivery to a newly-subscribed device
+ * right now, regardless of time of day. It still requires he's actually very hungry,
+ * and still honors the manual pause switch — force is for testing delivery, not for
+ * overriding a deliberate "notifications off" call.
  */
-export async function checkAndNotify(): Promise<void> {
+export async function checkAndNotify(opts: { force?: boolean } = {}): Promise<void> {
   const state = getDecayedState();
   const row = selectNotifiedAt.get() as { last_hunger_notified_at: number | null };
   const now = Date.now();
 
   if (state.hunger > VERY_HUNGRY_THRESHOLD) {
-    if (isQuietHours(new Date(now)) || areNotificationsPaused()) return;
-    const due = row.last_hunger_notified_at === null || now - row.last_hunger_notified_at >= RENOTIFY_INTERVAL_MS;
+    if (areNotificationsPaused()) return;
+    if (isQuietHours(new Date(now)) && !opts.force) return;
+    const due =
+      opts.force || row.last_hunger_notified_at === null || now - row.last_hunger_notified_at >= RENOTIFY_INTERVAL_MS;
     if (!due) return;
 
     updateNotifiedAt.run({ value: now });

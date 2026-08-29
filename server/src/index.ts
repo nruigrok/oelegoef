@@ -126,8 +126,11 @@ app.post("/api/push/unsubscribe", (req, res) => {
 
 // Testing-only backdoor, same spirit as /api/debug above: fires the periodic
 // hunger-notification check immediately instead of waiting up to CHECK_INTERVAL_MS.
-app.post("/api/push/check-now", (_req, res) => {
-  checkAndNotify()
+// ?force=true bypasses quiet hours and the renotify cooldown (still requires he's
+// actually very hungry, and still honors the manual pause switch) — for confirming
+// delivery to a newly-subscribed device right now. See push.ts's checkAndNotify().
+app.post("/api/push/check-now", (req, res) => {
+  checkAndNotify({ force: req.query.force === "true" })
     .then(() => res.json({ checked: true }))
     .catch((err) => {
       console.error(err);
