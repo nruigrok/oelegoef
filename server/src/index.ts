@@ -12,6 +12,8 @@ import {
   checkAndNotify,
   listSubscriptions,
   setNotifyAfter,
+  areNotificationsPaused,
+  setNotificationsPaused,
 } from "./push.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -155,6 +157,22 @@ app.post("/api/push/set-notify-after", (req, res) => {
     return;
   }
   res.json({ ok: true });
+});
+
+// Manual kill switch for all subscribers, for scripts/push-pause.mjs — never called
+// from the client. Independent of quiet hours and per-subscription notify_after.
+app.get("/api/push/pause-status", (_req, res) => {
+  res.json({ paused: areNotificationsPaused() });
+});
+
+app.post("/api/push/pause", (_req, res) => {
+  setNotificationsPaused(true);
+  res.json({ paused: true });
+});
+
+app.post("/api/push/resume", (_req, res) => {
+  setNotificationsPaused(false);
+  res.json({ paused: false });
 });
 
 // In production, the client is built into ../client/dist and served from here

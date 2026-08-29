@@ -41,22 +41,22 @@ timer. The hunger-notification scheduler (§12) does add a real background timer
 process, but only to decide when to *notify*, not to keep the simulation itself
 correct.
 
-- **Hunger** — `0` (full) to `100` (starving). Rises **+5/hour**. Each bite (§5) drops
+- **Hunger** — `0` (full) to `100` (starving). Rises **+10/hour**. Each bite (§5) drops
   it by a fixed amount (`-24`), floored at 0 — a fresh bowl is three bites, so a
   genuinely starving cat working through the whole thing in one sitting drops by up to
   `-72`, rather than resetting to 0 in one go.
 - **Weight** — `0` (too thin) to `100`, healthy band roughly `40–60`. Decays
   **-0.278/hour** on its own (metabolism/age — mirrors "he loses weight unless he
-  eats"). Each bite adds a flat **+1.33**, capped at 100.
+  eats"). Each bite adds a flat **+0.67**, capped at 100.
 
-Both stats are pinned to real grams of chicken (see §5): a bite is **40g**, three per
-120g bowl, and the cat needs **200g/day**. Weight gain-per-bite and weight decay-per-hour
+Both stats are pinned to real grams of chicken (see §5): a bite is **20g**, three per
+60g bowl, and the cat needs **200g/day**. Weight gain-per-bite and weight decay-per-hour
 are both expressed via the same conversion — **30g = 1 weight unit** (from the
 `2.00–5.00 kg` scale display range, §6: 3kg spread over the 0–100 stat) — so eating
 exactly 200g/day exactly cancels a day of decay: true metabolic equilibrium sits at
 *literally* 200g/day, not just approximately. Likewise, `FEED_HUNGER_DROP` (24) is
-picked so a full day's worth of organically-rising hunger (24h × 5/hour = 120) is
-exactly discharged by 5 bites (200g) — "hunger fully managed" and "200g/day eaten"
+picked so a full day's worth of organically-rising hunger (24h × 10/hour = 240) is
+exactly discharged by 10 bites (200g) — "hunger fully managed" and "200g/day eaten"
 describe the same thing.
 
 These numbers are starting proposals, easy to retune after playtesting — the point is
@@ -229,7 +229,7 @@ already very hungry greets the player with an immediate meow instead of the usua
    — both directions work, mirroring "we pick him up and set him in front of the
    chicken, or pick up the chicken and set it in front of him." Dragging snaps to a
    spot the same way.
-4. A fresh bowl holds three bites, **40g each (120g total)** — the cat needs roughly
+4. A fresh bowl holds three bites, **20g each (60g total)** — the cat needs roughly
    **200g/day** (§3) — drawn down one level per bite through four sprites — `full →
    half → almostempty → empty` — rather than disappearing or resetting; it stays
    exactly where it was placed regardless of level. When the cat's spot and the food's
@@ -429,7 +429,7 @@ Not design decisions so much as numbers to adjust after actually playing with it
 
 - Hunger rise rate, feed amount, weight decay/gain rate (§3) — currently anchored to
   200g/day as the literal maintenance target, with 30g = 1 weight unit
-- Hunger tier thresholds (15/40/70) and bites per bowl (currently 3, 40g each) (§3/§5)
+- Hunger tier thresholds (15/40/70) and bites per bowl (currently 3, 20g each) (§3/§5)
 - Stir/self-wake frequency curve vs. hunger, and the ambient purr/meow rate (§4)
 - Wander chance (§4, shared by the poke/eat/decline triggers), the separate
   wander-to-food-on-waking chance (§4), and the wandering-while-unwatched per-hour
@@ -479,3 +479,18 @@ no in-app UI for this; it's set via `scripts/push-delay.mjs` against the running
 server. Because the renotify cadence above is a single shared clock, a subscription
 becoming eligible mid-cooldown waits for the next scheduled check rather than sending
 that instant.
+
+**Quiet hours:** no push is ever sent with an hour-of-day in `[23:00, 9:00)`, using the
+server's own local time (there's no per-subscription timezone to key off of — same
+one-shared-clock reasoning as the rest of this section). A hunger crossing that happens
+during the window is simply skipped rather than queued: `last_hunger_notified_at` is
+left untouched, so the first check after quiet hours ends finds the notification
+already overdue and sends immediately, the same as any other stale interval.
+
+**Manual pause:** a single kill switch (`notifications_paused` on the shared
+`game_state` row) that, while set, silences sends to every subscriber regardless of
+quiet hours or hunger — for taking the cat's notifications offline entirely (e.g.
+travel, a broken feature) until deliberately turned back on. No in-app UI, by design
+(§10-style admin backdoor): toggled via `scripts/push-pause.mjs` against
+`/api/push/pause` / `/api/push/resume`, with `/api/push/pause-status` to check current
+state.

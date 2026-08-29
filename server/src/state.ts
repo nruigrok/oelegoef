@@ -40,16 +40,16 @@ interface GameStateRow {
 }
 
 // Tunable simulation parameters — see design.md §3 and §11. Weight and hunger are both
-// pinned to real grams of chicken: a bite is 40g (three per 120g bowl), and the cat
+// pinned to real grams of chicken: a bite is 20g (three per 60g bowl), and the cat
 // needs 200g/day. FEED_WEIGHT_GAIN and WEIGHT_DECAY_PER_HOUR are both expressed via the
 // same grams-per-weight-unit conversion (30g/unit, taken from weightToKg()'s existing
 // 2-5kg display range in client/src/main.ts — 3kg over the 0-100 stat), so eating
 // exactly the daily target exactly cancels a day of decay: true equilibrium sits at
 // 200g/day, not just approximately.
-const BITE_GRAMS = 40;
+const BITE_GRAMS = 20;
 const DAILY_TARGET_GRAMS = 200;
 const GRAMS_PER_WEIGHT_UNIT = 30;
-const HUNGER_RISE_PER_HOUR = 5;
+const HUNGER_RISE_PER_HOUR = 10;
 const FEED_HUNGER_DROP = 24;
 const FEED_WEIGHT_GAIN = BITE_GRAMS / GRAMS_PER_WEIGHT_UNIT;
 const WEIGHT_DECAY_PER_HOUR = DAILY_TARGET_GRAMS / GRAMS_PER_WEIGHT_UNIT / 24;

@@ -8,6 +8,17 @@ const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 // Once very-hungry and unfed, how long to wait before nagging again — repeats on this
 // cadence for as long as he stays hungry, rather than notifying once per episode.
 const RENOTIFY_INTERVAL_MS = 4 * 60 * 60 * 1000;
+// Quiet hours: no push is ever sent with an hour-of-day (server's local time — there's
+// no per-subscription timezone) in [23:00, 9:00). A crossing that happens during this
+// window is simply skipped rather than queued — the next check after quiet hours ends
+// sends immediately, same as any other overdue notification. See design.md §12.
+const QUIET_HOUR_START = 23;
+const QUIET_HOUR_END = 9;
+
+function isQuietHours(date: Date): boolean {
+  const hour = date.getHours();
+  return hour >= QUIET_HOUR_START || hour < QUIET_HOUR_END;
+}
 
 export interface PushSubscriptionJSON {
   endpoint: string;
@@ -69,6 +80,19 @@ export function unsubscribe(endpoint: string): void {
 const selectAllSubscriptions = db.prepare("SELECT * FROM push_subscriptions");
 const selectNotifiedAt = db.prepare("SELECT last_hunger_notified_at FROM game_state WHERE id = 1");
 const updateNotifiedAt = db.prepare("UPDATE game_state SET last_hunger_notified_at = @value WHERE id = 1");
+const selectPaused = db.prepare("SELECT notifications_paused FROM game_state WHERE id = 1");
+const updatePaused = db.prepare("UPDATE game_state SET notifications_paused = @value WHERE id = 1");
+
+/** For scripts/push-pause.mjs — a manual kill switch for all subscribers, independent
+ * of quiet hours and per-subscription notify_after. Never exposed to the client. */
+export function areNotificationsPaused(): boolean {
+  const row = selectPaused.get() as { notifications_paused: number };
+  return row.notifications_paused !== 0;
+}
+
+export function setNotificationsPaused(paused: boolean): void {
+  updatePaused.run({ value: paused ? 1 : 0 });
+}
 
 export interface SubscriptionSummary {
   endpoint: string;
@@ -119,7 +143,11 @@ async function sendToAll(payload: string): Promise<void> {
  * Runs on CHECK_INTERVAL_MS. Applies decay via getDecayedState() (no duplicated hunger
  * math), then: notifies immediately on first crossing VERY_HUNGRY_THRESHOLD, renotifies
  * every RENOTIFY_INTERVAL_MS while he stays above it unfed, and clears the timer once
- * fed back down so the next episode notifies immediately again.
+ * fed back down so the next episode notifies immediately again. Sending is further
+ * gated by quiet hours (isQuietHours()) and the manual pause switch
+ * (areNotificationsPaused()) — either simply skips the send; `last_hunger_notified_at`
+ * is left untouched so the next eligible check sends right away rather than waiting out
+ * a stale interval.
  */
 export async function checkAndNotify(): Promise<void> {
   const state = getDecayedState();
@@ -127,6 +155,7 @@ export async function checkAndNotify(): Promise<void> {
   const now = Date.now();
 
   if (state.hunger > VERY_HUNGRY_THRESHOLD) {
+    if (isQuietHours(new Date(now)) || areNotificationsPaused()) return;
     const due = row.last_hunger_notified_at === null || now - row.last_hunger_notified_at >= RENOTIFY_INTERVAL_MS;
     if (!due) return;
 

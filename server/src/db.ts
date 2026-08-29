@@ -42,6 +42,16 @@ try {
 }
 
 try {
+  // Manual kill switch for push.ts's sendToAll() — set/cleared only via
+  // scripts/push-pause.mjs, never from the app itself. Lives on the shared game_state
+  // row for the same reason last_hunger_notified_at does: one shared clock/flag rather
+  // than per-subscription state.
+  db.exec("ALTER TABLE game_state ADD COLUMN notifications_paused INTEGER NOT NULL DEFAULT 0");
+} catch {
+  // already has the column
+}
+
+try {
   // Grams-eaten tracking (design.md §3) — day_key defaults to '' so it never matches a
   // real calendar date, which makes the first getDecayedState() call after this
   // migration land on the normal "day advanced" path (harmless: grams_today/yesterday
