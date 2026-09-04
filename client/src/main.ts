@@ -575,7 +575,13 @@ async function eatFood(opts: { auto?: boolean; isSecondAutoBite?: boolean } = {}
   showThought("Hey, kip! Lekker!");
   playSound(eatingSound);
   const myGeneration = catGeneration;
-  const [result] = await Promise.all([api.feed(), delay(EAT_DURATION_MS)]);
+  let result: { fed: boolean; state: GameState };
+  try {
+    [result] = await Promise.all([api.feed(), delay(EAT_DURATION_MS)]);
+  } catch (err) {
+    await recoverFromNetworkError(err);
+    return;
+  }
   if (myGeneration !== catGeneration) return;
   applyServerState(result.state);
   if (result.fed) {
@@ -615,6 +621,26 @@ function settleIntoLyingDown() {
   } else if (!tryWanderTowardFood()) {
     checkForFood();
   }
+}
+
+/**
+ * Recovery for a request that fails or times out partway through a cat gesture
+ * (drag-drop, poke-to-eat, wander, ...). Those chains only ever clear `animating` in
+ * the settled-pose function waiting at the far end (showLyingDown/showAsleep/
+ * showSitting) — if the request never comes back, that end is never reached, `animating`
+ * stays true forever, and isBlocked() then silently ignores every future tap/drag until
+ * the page is refreshed. Resyncs with the server if possible, otherwise just settles
+ * from whatever state is already held locally, either way guaranteeing the lock clears.
+ */
+async function recoverFromNetworkError(err: unknown) {
+  console.error("Toby: request failed mid-gesture, recovering", err);
+  setStatus("Connection hiccup — reconnecting...");
+  try {
+    applyServerState(await api.getState());
+  } catch {
+    // Still unreachable — settle from the state we already have rather than stay stuck.
+  }
+  settleIntoLyingDown();
 }
 
 /**
@@ -690,7 +716,13 @@ async function wanderToNewSpot(targetSpotId?: string) {
   catEl.classList.add("walking-glide");
   catEl.style.backgroundImage = `url(${goingEast ? walkingEastGif : walkingWestGif})`;
   positionAtSpot(catEl, spotId);
-  const [result] = await Promise.all([api.moveCat(spotId), delay(WALK_GLIDE_MS)]);
+  let result: GameState;
+  try {
+    [result] = await Promise.all([api.moveCat(spotId), delay(WALK_GLIDE_MS)]);
+  } catch (err) {
+    await recoverFromNetworkError(err);
+    return;
+  }
   if (myGeneration !== catGeneration) return;
   applyServerState(result);
 
@@ -825,23 +857,47 @@ async function moveCat(spotId: string) {
   // Captured before the round-trip: if a newer drag/tap has changed the cat's state
   // by the time this resolves, this response is stale and shouldn't animate over it.
   const myGeneration = catGeneration;
-  applyServerState(await api.moveCat(spotId));
+  let result: GameState;
+  try {
+    result = await api.moveCat(spotId);
+  } catch (err) {
+    await recoverFromNetworkError(err);
+    return;
+  }
+  applyServerState(result);
   if (myGeneration !== catGeneration) return;
   showReleaseTransition();
 }
 
 async function placeFood(spotId: string) {
-  applyServerState(await api.placeFood(spotId));
+  try {
+    applyServerState(await api.placeFood(spotId));
+  } catch (err) {
+    console.error("Toby: placeFood failed", err);
+    setStatus("Connection hiccup — try again");
+    return;
+  }
   checkForFood();
 }
 
 async function moveFood(spotId: string) {
-  applyServerState(await api.moveFood(spotId));
+  try {
+    applyServerState(await api.moveFood(spotId));
+  } catch (err) {
+    console.error("Toby: moveFood failed", err);
+    setStatus("Connection hiccup — try again");
+    return;
+  }
   checkForFood();
 }
 
 async function refillFood() {
-  applyServerState(await api.refillFood());
+  try {
+    applyServerState(await api.refillFood());
+  } catch (err) {
+    console.error("Toby: refillFood failed", err);
+    setStatus("Connection hiccup — try again");
+  }
 }
 
 const TAP_THRESHOLD = 6;
@@ -1095,7 +1151,11 @@ function startAmbientBehavior() {
 function startPeriodicSync() {
   setInterval(async () => {
     if (dragging) return;
-    applyServerState(await api.getState());
+    try {
+      applyServerState(await api.getState());
+    } catch (err) {
+      console.error("Toby: periodic sync failed", err);
+    }
   }, 2 * 60 * 1000);
 }
 

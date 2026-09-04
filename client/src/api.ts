@@ -11,15 +11,27 @@ export interface GameState {
   updatedAt: number;
 }
 
+// Bounds how long a gesture (drag-drop, poke-to-eat, ...) can stay locked waiting on
+// the server — without this, a stalled mobile connection never rejects on its own and
+// the caller's in-progress animation state is stuck until the page is refreshed.
+const REQUEST_TIMEOUT_MS = 10_000;
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  if (!res.ok) {
-    throw new Error(`${path} failed: ${res.status}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`${path} failed: ${res.status}`);
+    }
+    return res.json() as Promise<T>;
+  } finally {
+    clearTimeout(timeout);
   }
-  return res.json() as Promise<T>;
 }
 
 export const api = {
