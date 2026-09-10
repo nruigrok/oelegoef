@@ -8,6 +8,9 @@ In use in the mockup:
 - panting.mp3: mono cut with fades of mbardak-tired-dog-panting-52-535174.mp3
   (Pixabay, "Tired dog panting" by mbardak). Same licence.
 
+- splash.mp3: first 2.2 s of freesound_community-dive-6423.mp3 (Pixabay, "Dive" by
+  freesound_community). Same licence. Played only when he jumps or is dropped into the pool.
+
 Earlier candidates, no longer used:
 
 - bark-1.mp3: cut from "Barking of a dog.ogg", Wikimedia Commons, CC BY-SA 3.0
