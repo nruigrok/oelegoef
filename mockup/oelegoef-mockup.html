@@ -271,7 +271,7 @@
 <div class="page">
   <div class="intro">
     <h1>Oelegoef in de tuin</h1>
-    <p>Een mockup van het spel uit het plan. De foto is de tuin met het randje rond het zwembad, de hond komt uit Pixellab. Sleep het bakje, de hond en de bal op het scherm, en klik op het zakje als er een drol ligt. De tellers achter de balken lopen echt mee over de dag.</p>
+    <p>Een mockup van het spel uit het plan. De foto is de tuin met het randje rond het zwembad, de hond komt uit Pixellab. Hij begint hongerig: sleep het bakje uit de bak naar de tuin. Verder sleep je de hond en de bal op het scherm, en klik je op het zakje als er een drol ligt. De tellers achter de balken lopen echt mee over de dag.</p>
   </div>
 
   <div class="stage">
@@ -384,7 +384,6 @@
         <h2>Probeer het zelf</h2>
         <div class="states" id="states" role="group" aria-label="Acties">
           <button type="button" data-action="rest">Rust</button>
-          <button type="button" data-action="hungry">Honger</button>
           <button type="button" data-action="newday">Nieuwe dag</button>
         </div>
         <p class="note" style="margin-top:12px">Slepen doe je op het telefoonscherm: het <b>bakje</b> uit de bak de tuin in, de <b>hond</b> naar het bordje Wandeling om hem uit te laten, en de <b>bal</b> die in de tuin ligt het water in. Ligt er een drol, dan maak je eerst een foto met het fototoestel en pas daarna mag het zakje. Tik op de hond zonder te slepen: dan aai je hem.</p>
@@ -1110,7 +1109,8 @@
     ballHome(); fetches = 0; fedUpUntil = 0;
     bowlToTray();
     setBars();
-    status.textContent = "Nieuwe dag. Tellers op nul, de bal ligt weer in de bak, en hij heeft alweer trek.";
+    status.textContent = "Nieuwe dag. Tellers op nul, de bal ligt weer op zijn plek, en hij heeft alweer trek.";
+    setTimeout(() => actHungry(++token), 1500);
   }
 
   // ---- buttons ----
@@ -1303,6 +1303,7 @@
   bowlToTray();
   ballHome();
   lieDownAtRest();
-  status.textContent = `${NAME} ligt uitgeteld op de tegels naast het zwembad.`;
+  // the day starts with a hungry dog: he gets up, goes to the chair and barks for his bowl
+  setTimeout(() => { if (token === 0) actHungry(++token); }, 1200);
 })();
 </script>
