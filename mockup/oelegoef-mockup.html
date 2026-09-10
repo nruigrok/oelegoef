@@ -808,7 +808,8 @@
   }
   const nearTable = ([x, y]) => x < 235 && y > 425;
 
-  async function actHungry(t) {
+  /** Hungry: up onto the chair and bark. With `barkMs` he gives up after that long and lies down again. */
+  async function actHungry(t, barkMs = 600000) {
     stats.hunger = 82; setBars();
     status.textContent = `${NAME} heeft erg veel honger.`;
     if (!await standUp(t)) return;
@@ -820,14 +821,18 @@
     status.textContent = `${NAME} zit op de stoel en blaft. Sleep het bakje uit de bak naar de tuin.`;
     // a bark every 2-3 seconds, with a little hop and a WOEF! bubble; quiet in between
     let nextBark = 600, barkUntil = 0;
-    await tween(600000, (p) => {
-      const ms = p * 600000;
+    if (!await tween(barkMs, (p) => {
+      const ms = p * barkMs;
       if (ms >= nextBark) { bark(); barkUntil = ms + 450; nextBark = ms + 2000 + Math.random() * 1200; }
       const barking = ms < barkUntil, phase = barking ? 1 - (barkUntil - ms) / 450 : 0;
       const hop = barking ? -5 * Math.sin(Math.PI * phase) : 0;
       const size = setDog(x1, y1, "sit-sw", { size: 84, dy: hop });
       showBubble(x1, y1, size, barking ? "WOEF!" : null, { fontSize: 15 });
-    }, t);
+    }, t)) return;
+    // nobody came: he gives up for now and lies down again (still hungry, the bowl still works)
+    hush();
+    status.textContent = `${NAME} geeft het op en gaat weer liggen. Hij heeft nog steeds honger: sleep het bakje de tuin in.`;
+    await goHome(t);
   }
 
   async function actEat(spotName, t) {
@@ -1110,7 +1115,7 @@
     bowlToTray();
     setBars();
     status.textContent = "Nieuwe dag. Tellers op nul, de bal ligt weer op zijn plek, en hij heeft alweer trek.";
-    setTimeout(() => actHungry(++token), 1500);
+    setTimeout(() => actHungry(++token, 6500), 1500);
   }
 
   // ---- buttons ----
@@ -1304,6 +1309,6 @@
   ballHome();
   lieDownAtRest();
   // the day starts with a hungry dog: he gets up, goes to the chair and barks for his bowl
-  setTimeout(() => { if (token === 0) actHungry(++token); }, 1200);
+  setTimeout(() => { if (token === 0) actHungry(++token, 6500); }, 1200);
 })();
 </script>

@@ -2,8 +2,11 @@
 <html lang="nl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#eef3e6" />
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -820,7 +823,8 @@
   }
   const nearTable = ([x, y]) => x < 235 && y > 425;
 
-  async function actHungry(t) {
+  /** Hungry: up onto the chair and bark. With `barkMs` he gives up after that long and lies down again. */
+  async function actHungry(t, barkMs = 600000) {
     stats.hunger = 82; setBars();
     status.textContent = `${NAME} heeft erg veel honger.`;
     if (!await standUp(t)) return;
@@ -832,14 +836,18 @@
     status.textContent = `${NAME} zit op de stoel en blaft. Sleep het bakje uit de bak naar de tuin.`;
     // a bark every 2-3 seconds, with a little hop and a WOEF! bubble; quiet in between
     let nextBark = 600, barkUntil = 0;
-    await tween(600000, (p) => {
-      const ms = p * 600000;
+    if (!await tween(barkMs, (p) => {
+      const ms = p * barkMs;
       if (ms >= nextBark) { bark(); barkUntil = ms + 450; nextBark = ms + 2000 + Math.random() * 1200; }
       const barking = ms < barkUntil, phase = barking ? 1 - (barkUntil - ms) / 450 : 0;
       const hop = barking ? -5 * Math.sin(Math.PI * phase) : 0;
       const size = setDog(x1, y1, "sit-sw", { size: 84, dy: hop });
       showBubble(x1, y1, size, barking ? "WOEF!" : null, { fontSize: 15 });
-    }, t);
+    }, t)) return;
+    // nobody came: he gives up for now and lies down again (still hungry, the bowl still works)
+    hush();
+    status.textContent = `${NAME} geeft het op en gaat weer liggen. Hij heeft nog steeds honger: sleep het bakje de tuin in.`;
+    await goHome(t);
   }
 
   async function actEat(spotName, t) {
@@ -1122,7 +1130,7 @@
     bowlToTray();
     setBars();
     status.textContent = "Nieuwe dag. Tellers op nul, de bal ligt weer op zijn plek, en hij heeft alweer trek.";
-    setTimeout(() => actHungry(++token), 1500);
+    setTimeout(() => actHungry(++token, 6500), 1500);
   }
 
   // ---- buttons ----
@@ -1316,8 +1324,27 @@
   ballHome();
   lieDownAtRest();
   // the day starts with a hungry dog: he gets up, goes to the chair and barks for his bowl
-  setTimeout(() => { if (token === 0) actHungry(++token); }, 1200);
+  setTimeout(() => { if (token === 0) actHungry(++token, 6500); }, 1200);
 })();
 </script>
+    <style>
+    /* ---- site mode: game only, fitted to the phone ---- */
+    html, body { height: 100%; }
+    body { background: #eef3e6; overflow: hidden; }
+    .page { max-width: none; padding: 0; height: 100%; height: 100dvh; }
+    .intro, .legend { display: none; }
+    .stage { display: block; height: 100%; }
+    .phone {
+      background: none; border-radius: 0; padding: 0; box-shadow: none;
+      width: 100%; max-width: 480px; height: 100%; margin: 0 auto;
+    }
+    .screen { border-radius: 0; height: 100%; min-height: 0; }
+    .app-header { padding: max(10px, env(safe-area-inset-top)) 16px 8px; }
+    .scene { flex: 1; min-height: 0; display: flex; justify-content: center; }
+    .scene svg { width: 100%; height: 100%; }
+    .tray { padding: 8px 16px; }
+    .tray-item { height: 58px; }
+    .status { padding: 6px 16px calc(8px + env(safe-area-inset-bottom)); min-height: 0; }
+</style>
   </body>
 </html>
