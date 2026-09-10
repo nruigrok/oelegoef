@@ -402,7 +402,7 @@
           <div class="icon" style="background:#e6dccd"><svg viewBox="-14 -10 28 20"><use href="#poop-shape"/></svg></div>
           <div>
             <h3>GoedZo <span>3 keer per dag</span></h3>
-            <p>Loopt op zijn eigen klok, los van het eten. Sleep hem naar het bordje Wandeling aan het begin van het pad: hij loopt door tot bij de vuilnisbak en zegt daarna GOEDZO. Na de derde keer hoeft hij niet meer. De drol blijft liggen tot je hem met het zakje in de vuilnisbak gooit, en dat mag pas na een foto.</p>
+            <p>Loopt op zijn eigen klok, los van het eten. Sleep hem naar het bordje Wandeling aan het begin van het pad: hij loopt door tot bij de vuilnisbak en zegt daarna GOEDZO 1, 2 of 3. In de ochtend doet hij er hooguit twee; de derde komt pas na twaalven. Daarna hoeft hij niet meer. De drol blijft liggen tot je hem met het zakje in de vuilnisbak gooit, en dat mag pas na een foto.</p>
           </div>
         </div>
         <div class="loop">
@@ -868,7 +868,16 @@
   }
 
   /** He has been set down on the path: up to the bin, and (if he still needs to) a GoedZo. */
+  const isMorning = () => new Date().getHours() < 12;
   async function actWalkPath(t) {
+    if (day.poops >= 2 && day.poops < TARGETS[1] && isMorning()) {
+      status.textContent = "Twee GOEDZO's in de ochtend is genoeg; de derde komt na twaalven.";
+      say("Nee Mo, de derde GOEDZO doen we in de middag!");
+      if (!await wait(3200, t)) return;
+      hush();
+      await goHome(t);
+      return;
+    }
     if (day.poops >= TARGETS[1]) {
       status.textContent = `${NAME} is vandaag al ${TARGETS[1]} keer geweest.`;
       say("Nee, nu hoef ik niet meer...");
@@ -886,7 +895,7 @@
     addPoop(x - 14, y + 2);
     day.poops += 1; stats.bowel = 5; setBars();
     setDog(x, y, "idle-s");
-    say("GOEDZO!");
+    say(`GOEDZO ${day.poops}`);
     status.textContent = `GoedZo ${day.poops} van ${TARGETS[1]}. De drol ligt bij de vuilnisbak: eerst een foto, dan het zakje.`;
     if (!await wait(1800, t)) return;
     say("Vergeet je niet om een foto te maken?");
@@ -978,9 +987,9 @@
     say("Zo, even lekker uitschudden");
     if (!await tween(900, (p) => setDog(x5 + Math.sin(p * 40) * 3, y5, "idle-sw"), t)) return;
     if (!await wait(900, t)) return;
-    showBubble(x5, y5, setDog(x5, y5, "sit-sw"), "💦"); dogAt = "standing";
+    setDog(x5, y5, "sit-sw"); dogAt = "standing";
     status.textContent = "Gezwommen, en nog even nat.";
-    if (!await wait(2500, t)) return;
+    if (!await wait(2000, t)) return;
     hush(); $("drips").classList.add("hidden"); dog.classList.remove("wet");
     await goHome(t);
   }
