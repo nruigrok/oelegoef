@@ -424,7 +424,7 @@
           <div class="icon" style="background:#d6ecf3"><svg viewBox="-12 -12 24 24"><use href="#ball-shape"/></svg></div>
           <div>
             <h3>Zwemmen <span>1 keer per dag</span></h3>
-            <p>De bal ligt in de tuin. Gooi hem ergens op het droge, ook naar de overkant van het zwembad of naar het pad, en hij haalt hem en brengt hem terug. Valt de bal bij de tafel of de stoel, dan springt hij op de stoel om hem te pakken. Twee keer vraagt hij om nog een keer, de derde keer is hij het even zat en laat hij de bal een minuut liggen. Sleep hem het water in en hij gaat zwemmen. Hij rent naar de rand, springt erin, haalt de bal en klimt er aan de zuidkant uit. Daarna schudt hij zich uit, staat hij hijgend aan de rand van het zwembad, en ligt de bal weer op het terras, tot de volgende dag op zijn vaste plek. Een tweede keer weigert hij: hij heeft vandaag al gezwommen.</p>
+            <p>De bal ligt in de tuin. Gooi hem ergens op het droge, ook naar de overkant van het zwembad of naar het pad, en hij haalt hem en brengt hem terug. Valt de bal bij de tafel of de stoel, dan springt hij op de stoel om hem te pakken. Twee keer vraagt hij om nog een keer, de derde keer is hij het even zat en laat hij de bal een minuut liggen. Sleep hem het water in en hij gaat zwemmen. Hij rent naar de rand, springt erin, haalt de bal en klimt er aan de zuidkant uit. Daarna schudt hij zich uit en ligt de bal weer op het terras, tot de volgende dag op zijn vaste plek. Een tweede keer weigert hij: hij gaat aan de rand staan, zegt dat hij al gezwommen heeft, en blijft daar hijgend naar het water kijken.</p>
           </div>
         </div>
       </div>
@@ -910,11 +910,19 @@
   /** The swim. `ballXY` is where the ball floats (null: he was dropped in the water himself). */
   async function actSwim(ballXY, t) {
     if (day.swims >= 1) {
-      status.textContent = `${NAME} heeft vandaag al gezwommen. De bal gaat terug naar zijn plek.`;
+      // already swum today: he goes to the edge, looks at the ball, and stays there panting
+      status.textContent = `${NAME} heeft vandaag al gezwommen.`;
+      if (!await standUp(t)) return;
+      const [ex, ey] = SPOTS["pool-edge"];
+      if (dist(dogXY, [ex, ey]) > 4 && !await walkRoute(dogXY, [ex, ey], t)) return;
+      setDog(ex, ey, "idle-n");
       say("Nee, niet nog een keer, ik heb al gezwommen!");
       if (!await wait(3000, t)) return;
       hush();
+      status.textContent = `${NAME} staat hijgend aan de rand. De bal gaat terug naar zijn plek.`;
       ballHome();
+      pant(2);
+      if (!await tween(7500, (p) => setDog(ex, ey, "idle-n", { dy: -Math.abs(Math.sin(p * 7500 / 190)) * 1.2 }), t)) return;
       await goHome(t);
       return;
     }
@@ -982,19 +990,8 @@
     if (!await wait(900, t)) return;
     showBubble(x5, y5, setDog(x5, y5, "sit-sw"), "💦"); dogAt = "standing";
     status.textContent = "Gezwommen, en nog even nat.";
-    if (!await wait(2000, t)) return;
-    hush();
-    // then he stands at the pool edge, looking at the water, panting for a while
-    const [ex, ey] = SPOTS["pool-edge"];
-    if (!await walkXY([x5, y5], [ex, ey], t)) return;
-    $("drips").setAttribute("transform", `translate(${ex} ${ey + 4})`);
-    status.textContent = `${NAME} staat uitgehijgd aan de rand van het zwembad.`;
-    pant(2);
-    if (!await tween(7500, (p) => {
-      const ms = p * 7500;
-      setDog(ex, ey, "idle-n", { dy: -Math.abs(Math.sin(ms / 190)) * 1.2 });
-    }, t)) return;
-    $("drips").classList.add("hidden"); dog.classList.remove("wet");
+    if (!await wait(2500, t)) return;
+    hush(); $("drips").classList.add("hidden"); dog.classList.remove("wet");
     await goHome(t);
   }
 
