@@ -41,9 +41,10 @@ SITE_CSS = """
        (taller buttons), and on a short screen the scene shrinks and its svg crops the sides */
     .scene { flex: 0 1 auto; min-height: 0; width: 100%; aspect-ratio: 2 / 3; display: flex; justify-content: center; }
     .scene svg { width: 100%; height: 100%; }
-    .tray { flex: 1 0 auto; padding: 10px 16px; align-content: center; grid-auto-rows: minmax(58px, 96px); }
-    .tray-item { height: auto; }
-    .status { padding: 6px 16px calc(8px + env(safe-area-inset-bottom)); min-height: 0; }
+    .tray { flex: 1 0 auto; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); align-content: center; grid-auto-rows: minmax(48px, 64px); gap: 8px; }
+    .tray-item { height: auto; padding: 4px 4px 3px; font-size: 10px; }
+    .tray-item svg { width: 34px; height: 28px; }
+    .status { display: none; }
 """
 
 page = f"""<!doctype html>
