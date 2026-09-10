@@ -1,0 +1,65 @@
+{
+  "group_id": "aa031dfd-e91e-459c-a849-746361520905",
+  "states": [
+    {
+      "character": {
+        "id": "774602ae-c5bc-4457-97f6-5d33de6d7eb4",
+        "name": "Idle",
+        "prompt": "Goof is a cute, goofy mid-sized labradoodle. He has curly black hair almost covering his eyes\n",
+        "size": {
+          "width": 128,
+          "height": 128
+        },
+        "template_id": "dog",
+        "directions": 8,
+        "view": "side",
+        "created_at": "2026-09-09T10:33:35.511984+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "south-east": "Idle/rotations/south-east.png",
+          "east": "Idle/rotations/east.png",
+          "north-east": "Idle/rotations/north-east.png",
+          "north": "Idle/rotations/north.png",
+          "north-west": "Idle/rotations/north-west.png",
+          "west": "Idle/rotations/west.png",
+          "south-west": "Idle/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    },
+    {
+      "character": {
+        "id": "e6b26998-a09b-42ed-b1f4-3256def81fe9",
+        "name": "Sitting down",
+        "prompt": "Goof is a cute, goofy mid-sized labradoodle. He has curly black hair almost covering his eyes\n",
+        "size": {
+          "width": 128,
+          "height": 128
+        },
+        "template_id": "dog",
+        "directions": 8,
+        "view": "side",
+        "created_at": "2026-09-09T10:45:54.182584+00:00"
+      },
+      "folder": "Sitting_down",
+      "frames": {
+        "rotations": {
+          "south": "Sitting_down/rotations/south.png",
+          "south-east": "Sitting_down/rotations/south-east.png",
+          "east": "Sitting_down/rotations/east.png",
+          "north-east": "Sitting_down/rotations/north-east.png",
+          "north": "Sitting_down/rotations/north.png",
+          "north-west": "Sitting_down/rotations/north-west.png",
+          "west": "Sitting_down/rotations/west.png",
+          "south-west": "Sitting_down/rotations/south-west.png"
+        },
+        "animations": {}
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-09-09T11:04:01.168058"
+}
