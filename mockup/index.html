@@ -613,7 +613,7 @@
   const BARK2 = BARK.cloneNode(); BARK2.preload = "auto";
   function bark() {
     if (!soundOn()) return;
-    BARK.volume = 0.7; BARK.currentTime = 0; BARK.play().catch(() => {});
+    BARK.muted = false; BARK.volume = 0.7; BARK.currentTime = 0; BARK.play().catch(() => {});
     if (Math.random() < 0.2) setTimeout(() => { BARK2.volume = 0.55; BARK2.playbackRate = 0.96; BARK2.currentTime = 0; BARK2.play().catch(() => {}); }, 420);
   }
   // Panting (Pixabay): after a run, and when he is petted.
@@ -623,23 +623,27 @@
   PANT.addEventListener("ended", () => { if (--pantLeft > 0) { PANT.currentTime = 0; PANT.play().catch(() => {}); } });
   function pant(times = 1) {
     if (!soundOn()) return;
-    PANT.pause(); PANT.volume = 0.8; PANT.currentTime = 0; pantLeft = times;
+    PANT.pause(); PANT.muted = false; PANT.volume = 0.8; PANT.currentTime = 0; pantLeft = times;
     PANT.play().catch(() => {});
   }
   // Browsers only allow sound after the first touch or click. On that first gesture every audio
-  // element gets a silent play/pause so it may play later, outside a gesture (iOS needs this per element).
+  // element is started and stopped again right away, unmuted (iOS does not count a muted start as
+  // permission), so it may play later outside a gesture. Also wakes the AudioContext.
   let audioUnlocked = false, audioUnlockedAt = 0;
   function unlockAudio() {
     if (audioUnlocked) return;
     audioUnlocked = true; audioUnlockedAt = performance.now();
     [BARK, BARK2, PANT, eatingAudio].forEach((a) => {
-      const wasMuted = a.muted; a.muted = true;
-      const p = a.play();
-      if (p && p.then) p.then(() => { a.pause(); a.currentTime = 0; a.muted = wasMuted; }).catch(() => { a.muted = wasMuted; });
+      try {
+        a.muted = false; a.volume = 0.01;
+        const p = a.play();
+        const done = () => { a.pause(); a.currentTime = 0; a.volume = 1; };
+        if (p && p.then) p.then(done).catch(() => { a.volume = 1; }); else done();
+      } catch { a.volume = 1; }
     });
-    try { ctx(); } catch {}
+    try { const c = ctx(); if (c) { const o = c.createOscillator(); const g = c.createGain(); g.gain.value = 0; o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime + 0.05); } } catch {}
   }
-  ["pointerdown", "touchstart", "keydown"].forEach((ev) => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
+  ["pointerdown", "touchstart", "touchend", "click", "keydown"].forEach((ev) => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
   /** A contented grumble: a low buzz with a purring pulse, a little pitch wobble, fading out. */
   function grumble() {
     if (!soundOn()) return;
