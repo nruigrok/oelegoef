@@ -528,7 +528,7 @@
   }
   const NAME = "Oelegoef";
 
-  const sizeAt = (y) => Math.round(40 + 50 * (y / 585));
+  const sizeAt = (y) => Math.round(46 + 56 * (y / 585));
 
   function setDog(x, y, sprite, opts = {}) {
     const size = opts.size || sizeAt(y);
@@ -754,7 +754,7 @@
     }
     if (dogAt === "chair") {
       const [x0, y0] = SPOTS.chair, [x1, y1] = SPOTS["chair-side"];
-      const ok = await tween(500, (p) => setDog(lerp(x0, x1, p), lerp(y0, y1, p), "idle-se", { size: Math.round(lerp(84, 80, p)), dy: -24 * Math.sin(Math.PI * p) }), t);
+      const ok = await tween(500, (p) => setDog(lerp(x0, x1, p), lerp(y0, y1, p), "idle-se", { size: Math.round(lerp(94, 90, p)), dy: -24 * Math.sin(Math.PI * p) }), t);
       dogAt = "standing"; return ok;
     }
     return true;
@@ -814,11 +814,11 @@
     const [x0, y0] = SPOTS["chair-side"], [x1, y1] = SPOTS.chair;
     if (!await tween(650, (p) => {
       const q = easeInOut(p);
-      const size = setDog(lerp(x0, x1, q), lerp(y0, y1, q), "idle-sw", { size: Math.round(lerp(80, 84, q)), dy: -34 * Math.sin(Math.PI * p) });
+      const size = setDog(lerp(x0, x1, q), lerp(y0, y1, q), "idle-sw", { size: Math.round(lerp(90, 94, q)), dy: -34 * Math.sin(Math.PI * p) });
       if (carry) carry(lerp(x0, x1, q), lerp(y0, y1, q) - 34 * Math.sin(Math.PI * p), size, false, "idle-sw");
     }, t)) return false;
-    setDog(x1, y1, "sit-sw", { size: 84 }); dogAt = "chair";
-    if (carry) carry(x1, y1, 84, false, "sit-sw");
+    setDog(x1, y1, "sit-sw", { size: 94 }); dogAt = "chair";
+    if (carry) carry(x1, y1, 94, false, "sit-sw");
     return true;
   }
   const nearTable = ([x, y]) => x < 235 && y > 425;
@@ -841,7 +841,7 @@
       if (ms >= nextBark) { bark(); barkUntil = ms + 450; nextBark = ms + 2000 + Math.random() * 1200; }
       const barking = ms < barkUntil, phase = barking ? 1 - (barkUntil - ms) / 450 : 0;
       const hop = barking ? -5 * Math.sin(Math.PI * phase) : 0;
-      const size = setDog(x1, y1, "sit-sw", { size: 84, dy: hop });
+      const size = setDog(x1, y1, "sit-sw", { size: 94, dy: hop });
       showBubble(x1, y1, size, barking ? "WOEF!" : null, { fontSize: 15 });
     }, t)) return;
     // nobody came: he gives up for now and lies down again (still hungry, the bowl still works)
@@ -1025,14 +1025,14 @@
       if (!await jumpOnChair(t)) return;
       if (!await wait(400, t)) return;
       const [cx, cy] = SPOTS.chair;
-      ballInMouth(cx, cy, 84, "sit-sw", false);
+      ballInMouth(cx, cy, 94, "sit-sw", false);
       say("Hebbes!");
       if (!await wait(700, t)) return;
       hush();
       // and down again, ball in his mouth
       const [x1, y1] = SPOTS["chair-side"];
       if (!await tween(500, (p) => {
-        const size = setDog(lerp(cx, x1, p), lerp(cy, y1, p), "idle-se", { size: Math.round(lerp(84, 80, p)), dy: -24 * Math.sin(Math.PI * p) });
+        const size = setDog(lerp(cx, x1, p), lerp(cy, y1, p), "idle-se", { size: Math.round(lerp(94, 90, p)), dy: -24 * Math.sin(Math.PI * p) });
         ballInMouth(lerp(cx, x1, p), lerp(cy, y1, p) - 24 * Math.sin(Math.PI * p), size, "idle-se", false);
       }, t)) return;
       dogAt = "standing";
