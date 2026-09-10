@@ -36,7 +36,7 @@ SITE_CSS = """
       width: 100%; max-width: 480px; height: 100%; margin: 0 auto;
     }
     .screen { border-radius: 0; height: 100%; min-height: 0; }
-    .app-header { padding: max(10px, env(safe-area-inset-top)) 16px 8px; }
+    .app-header { padding: max(8px, env(safe-area-inset-top)) 16px 6px; }
     .scene { flex: 1; min-height: 0; display: flex; justify-content: center; }
     .scene svg { width: 100%; height: 100%; }
     .tray { padding: 8px 16px; }

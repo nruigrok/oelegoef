@@ -90,7 +90,7 @@
     font-family: "Nunito Sans", system-ui, sans-serif;
   }
   .app-header {
-    padding: 22px 18px 12px;
+    padding: 14px 18px 10px;
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 6px 12px;
@@ -106,7 +106,7 @@
   }
   .app-header .bell {
     grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-row: 1;
     width: 40px; height: 40px;
     border-radius: 50%;
     border: 1.5px solid #cfd8c4;
@@ -115,10 +115,10 @@
     font-size: 18px;
   }
   .stat-rows {
-    grid-column: 1 / -1;
+    grid-column: 1;
+    grid-row: 1;
     display: grid;
     gap: 7px;
-    margin-top: 6px;
   }
   .stat-row {
     display: grid;
@@ -278,7 +278,6 @@
     <div class="phone">
       <div class="screen">
         <header class="app-header">
-          <div class="name">Oelegoef</div>
           <button class="bell" type="button" title="Meldingen aan/uit" aria-label="Meldingen aan/uit">🔔</button>
           <div class="stat-rows">
             <div class="stat-row"><span>Honger</span><div class="bar"><div class="fill" id="hunger-fill"></div></div><b id="c-eten">2/3</b></div>
