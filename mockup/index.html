@@ -893,7 +893,7 @@
     say(`Voila, GoedZo ${day.poops}!`);
     status.textContent = `GoedZo ${day.poops} van ${TARGETS[1]}. De drol ligt bij de vuilnisbak: eerst een foto, dan het zakje.`;
     if (!await wait(1800, t)) return;
-    say("Er moet wel een foto gemaakt worden!");
+    say("Vergeet je niet om een foto te maken?");
     if (!await wait(2200, t)) return;
     hush();
     cur = [x, y];
