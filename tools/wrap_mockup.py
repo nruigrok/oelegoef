@@ -28,7 +28,9 @@ SITE_CSS = """
     /* ---- site mode: game only, fitted to the phone ---- */
     html, body { height: 100%; }
     body { background: #eef3e6; overflow: hidden; }
-    .page { max-width: none; padding: 0; height: 100%; height: 100dvh; }
+    /* the page is pinned to the visible viewport; --vh is set from window.innerHeight by the script
+       below, which is what actually fits on iOS Safari and Android Chrome with their toolbars */
+    .page { position: fixed; inset: 0; max-width: none; padding: 0; height: var(--vh, 100dvh); }
     .intro, .legend { display: none; }
     .stage { display: block; height: 100%; }
     .phone {
@@ -36,14 +38,17 @@ SITE_CSS = """
       width: 100%; max-width: 480px; height: 100%; margin: 0 auto;
     }
     .screen { border-radius: 0; height: 100%; min-height: 0; }
-    .app-header { padding: max(8px, env(safe-area-inset-top)) 16px 6px; }
-    /* the scene takes all the height between header and tray; the photo (extended with terrace at the
-       bottom) covers it, anchored at the top so the sky stays and only the extra terrace gets cropped */
+    .app-header { padding: max(6px, env(safe-area-inset-top)) 14px 6px; gap: 4px 10px; }
+    .stat-rows { gap: 4px; }
+    .stat-row { grid-template-columns: 58px 1fr 28px; gap: 8px; font-size: 12px; }
+    .stat-row b { font-size: 12px; }
+    .bar { height: 10px; }
+    .app-header .bell { width: 32px; height: 32px; font-size: 15px; }
     .scene { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; justify-content: center; }
     .scene svg { width: 100%; height: 100%; }
-    .tray { flex: 0 0 auto; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); grid-auto-rows: 56px; gap: 8px; }
-    .tray-item { height: auto; padding: 4px 4px 3px; font-size: 10px; }
-    .tray-item svg { width: 34px; height: 28px; }
+    .tray { flex: 0 0 auto; padding: 6px 14px calc(6px + env(safe-area-inset-bottom)); grid-auto-rows: 46px; gap: 8px; }
+    .tray-item { height: auto; padding: 3px 4px 2px; font-size: 9px; }
+    .tray-item svg { width: 28px; height: 22px; }
     .status { display: none; }
 """
 
@@ -64,6 +69,15 @@ page = f"""<!doctype html>
   <body>
 {body}
     <style>{SITE_CSS}</style>
+    <script>
+      (function () {{
+        var set = function () {{ document.documentElement.style.setProperty("--vh", window.innerHeight + "px"); }};
+        set();
+        window.addEventListener("resize", set);
+        window.addEventListener("orientationchange", function () {{ setTimeout(set, 300); }});
+        if (window.visualViewport) window.visualViewport.addEventListener("resize", set);
+      }})();
+    </script>
   </body>
 </html>
 """

@@ -133,7 +133,7 @@
     grid-column: 1;
     grid-row: 1;
     display: grid;
-    gap: 7px;
+    gap: 5px;
   }
   .stat-row {
     display: grid;
@@ -306,13 +306,12 @@
             <defs>
               <clipPath id="swim-clip"><rect id="swim-clip-rect" x="0" y="0" width="390" height="695"/></clipPath>
               <g id="ball-shape">
-                <g transform="scale(0.8)">
-                <circle r="7" fill="#1f4fa8"/>
-                <path d="M-6.6-2.4c4 3.2 9.2 3.2 13.2 0M-6.6 2.4c4-3.2 9.2-3.2 13.2 0" fill="none" stroke="#f5c400" stroke-width="2.8"/>
-                <path d="M-1.6-6.8c1 2 1 4 0 6M1.6 6.8c-1-2-1-4 0-6" fill="none" stroke="#f5c400" stroke-width="1.6"/>
-                <circle r="7" fill="none" stroke="#143a80" stroke-width="0.9"/>
-                <circle cx="-2.6" cy="-3.2" r="1.3" fill="#ffffff" opacity=".75"/>
-                </g>
+                <circle r="18" fill="#000" fill-opacity="0"/>
+                <circle r="8" fill="#e5261f"/>
+                <path d="M-7.6-2.6c4.6 3.6 10.6 3.6 15.2 0M-7.6 2.6c4.6-3.6 10.6-3.6 15.2 0" fill="none" stroke="#ffd23f" stroke-width="2.6"/>
+                <circle r="8" fill="none" stroke="#9e1410" stroke-width="0.9"/>
+                <circle cx="-3" cy="-3.6" r="1.5" fill="#ffffff" opacity=".8"/>
+              </g>
               </g>
               <g id="poop-shape">
                 <ellipse cx="0" cy="4" rx="11" ry="4.5" fill="#5a3b22"/>
@@ -418,7 +417,7 @@
           <div class="icon" style="background:#e6dccd"><svg viewBox="-14 -10 28 20"><use href="#poop-shape"/></svg></div>
           <div>
             <h3>GoedZo <span>3 keer per dag</span></h3>
-            <p>Loopt op zijn eigen klok, los van het eten. Sleep hem naar het bordje Wandeling aan het begin van het pad: hij loopt door tot bij de vuilnisbak en zegt daarna welke GoedZo van de dag het was. Na de derde keer hoeft hij niet meer. De drol blijft liggen tot je hem met het zakje in de vuilnisbak gooit, en dat mag pas na een foto.</p>
+            <p>Loopt op zijn eigen klok, los van het eten. Sleep hem naar het bordje Wandeling aan het begin van het pad: hij loopt door tot bij de vuilnisbak en zegt daarna GOEDZO. Na de derde keer hoeft hij niet meer. De drol blijft liggen tot je hem met het zakje in de vuilnisbak gooit, en dat mag pas na een foto.</p>
           </div>
         </div>
         <div class="loop">
@@ -902,7 +901,7 @@
     addPoop(x - 14, y + 2);
     day.poops += 1; stats.bowel = 5; setBars();
     setDog(x, y, "idle-s");
-    say(`Voila, GoedZo ${day.poops}!`);
+    say("GOEDZO!");
     status.textContent = `GoedZo ${day.poops} van ${TARGETS[1]}. De drol ligt bij de vuilnisbak: eerst een foto, dan het zakje.`;
     if (!await wait(1800, t)) return;
     say("Vergeet je niet om een foto te maken?");
@@ -1330,7 +1329,9 @@
     /* ---- site mode: game only, fitted to the phone ---- */
     html, body { height: 100%; }
     body { background: #eef3e6; overflow: hidden; }
-    .page { max-width: none; padding: 0; height: 100%; height: 100dvh; }
+    /* the page is pinned to the visible viewport; --vh is set from window.innerHeight by the script
+       below, which is what actually fits on iOS Safari and Android Chrome with their toolbars */
+    .page { position: fixed; inset: 0; max-width: none; padding: 0; height: var(--vh, 100dvh); }
     .intro, .legend { display: none; }
     .stage { display: block; height: 100%; }
     .phone {
@@ -1338,15 +1339,27 @@
       width: 100%; max-width: 480px; height: 100%; margin: 0 auto;
     }
     .screen { border-radius: 0; height: 100%; min-height: 0; }
-    .app-header { padding: max(8px, env(safe-area-inset-top)) 16px 6px; }
-    /* the scene takes all the height between header and tray; the photo (extended with terrace at the
-       bottom) covers it, anchored at the top so the sky stays and only the extra terrace gets cropped */
+    .app-header { padding: max(6px, env(safe-area-inset-top)) 14px 6px; gap: 4px 10px; }
+    .stat-rows { gap: 4px; }
+    .stat-row { grid-template-columns: 58px 1fr 28px; gap: 8px; font-size: 12px; }
+    .stat-row b { font-size: 12px; }
+    .bar { height: 10px; }
+    .app-header .bell { width: 32px; height: 32px; font-size: 15px; }
     .scene { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; justify-content: center; }
     .scene svg { width: 100%; height: 100%; }
-    .tray { flex: 0 0 auto; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); grid-auto-rows: 56px; gap: 8px; }
-    .tray-item { height: auto; padding: 4px 4px 3px; font-size: 10px; }
-    .tray-item svg { width: 34px; height: 28px; }
+    .tray { flex: 0 0 auto; padding: 6px 14px calc(6px + env(safe-area-inset-bottom)); grid-auto-rows: 46px; gap: 8px; }
+    .tray-item { height: auto; padding: 3px 4px 2px; font-size: 9px; }
+    .tray-item svg { width: 28px; height: 22px; }
     .status { display: none; }
 </style>
+    <script>
+      (function () {
+        var set = function () { document.documentElement.style.setProperty("--vh", window.innerHeight + "px"); };
+        set();
+        window.addEventListener("resize", set);
+        window.addEventListener("orientationchange", function () { setTimeout(set, 300); });
+        if (window.visualViewport) window.visualViewport.addEventListener("resize", set);
+      })();
+    </script>
   </body>
 </html>

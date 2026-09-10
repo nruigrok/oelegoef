@@ -118,7 +118,7 @@
     grid-column: 1;
     grid-row: 1;
     display: grid;
-    gap: 7px;
+    gap: 5px;
   }
   .stat-row {
     display: grid;
@@ -291,13 +291,12 @@
             <defs>
               <clipPath id="swim-clip"><rect id="swim-clip-rect" x="0" y="0" width="390" height="695"/></clipPath>
               <g id="ball-shape">
-                <g transform="scale(0.8)">
-                <circle r="7" fill="#1f4fa8"/>
-                <path d="M-6.6-2.4c4 3.2 9.2 3.2 13.2 0M-6.6 2.4c4-3.2 9.2-3.2 13.2 0" fill="none" stroke="#f5c400" stroke-width="2.8"/>
-                <path d="M-1.6-6.8c1 2 1 4 0 6M1.6 6.8c-1-2-1-4 0-6" fill="none" stroke="#f5c400" stroke-width="1.6"/>
-                <circle r="7" fill="none" stroke="#143a80" stroke-width="0.9"/>
-                <circle cx="-2.6" cy="-3.2" r="1.3" fill="#ffffff" opacity=".75"/>
-                </g>
+                <circle r="18" fill="#000" fill-opacity="0"/>
+                <circle r="8" fill="#e5261f"/>
+                <path d="M-7.6-2.6c4.6 3.6 10.6 3.6 15.2 0M-7.6 2.6c4.6-3.6 10.6-3.6 15.2 0" fill="none" stroke="#ffd23f" stroke-width="2.6"/>
+                <circle r="8" fill="none" stroke="#9e1410" stroke-width="0.9"/>
+                <circle cx="-3" cy="-3.6" r="1.5" fill="#ffffff" opacity=".8"/>
+              </g>
               </g>
               <g id="poop-shape">
                 <ellipse cx="0" cy="4" rx="11" ry="4.5" fill="#5a3b22"/>
@@ -403,7 +402,7 @@
           <div class="icon" style="background:#e6dccd"><svg viewBox="-14 -10 28 20"><use href="#poop-shape"/></svg></div>
           <div>
             <h3>GoedZo <span>3 keer per dag</span></h3>
-            <p>Loopt op zijn eigen klok, los van het eten. Sleep hem naar het bordje Wandeling aan het begin van het pad: hij loopt door tot bij de vuilnisbak en zegt daarna welke GoedZo van de dag het was. Na de derde keer hoeft hij niet meer. De drol blijft liggen tot je hem met het zakje in de vuilnisbak gooit, en dat mag pas na een foto.</p>
+            <p>Loopt op zijn eigen klok, los van het eten. Sleep hem naar het bordje Wandeling aan het begin van het pad: hij loopt door tot bij de vuilnisbak en zegt daarna GOEDZO. Na de derde keer hoeft hij niet meer. De drol blijft liggen tot je hem met het zakje in de vuilnisbak gooit, en dat mag pas na een foto.</p>
           </div>
         </div>
         <div class="loop">
@@ -887,7 +886,7 @@
     addPoop(x - 14, y + 2);
     day.poops += 1; stats.bowel = 5; setBars();
     setDog(x, y, "idle-s");
-    say(`Voila, GoedZo ${day.poops}!`);
+    say("GOEDZO!");
     status.textContent = `GoedZo ${day.poops} van ${TARGETS[1]}. De drol ligt bij de vuilnisbak: eerst een foto, dan het zakje.`;
     if (!await wait(1800, t)) return;
     say("Vergeet je niet om een foto te maken?");
