@@ -157,6 +157,21 @@
     flex: 1;
     line-height: 0;
   }
+  .screen { position: relative; }
+  #start-overlay {
+    position: absolute; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(31, 42, 28, 0.45);
+    cursor: pointer; touch-action: manipulation;
+  }
+  #start-overlay.hidden { display: none; }
+  .start-card {
+    background: #eef3e6; color: #1f2a1c;
+    border-radius: 18px; padding: 18px 26px; text-align: center;
+    box-shadow: 0 12px 30px rgba(0,0,0,.35);
+  }
+  .start-title { font-family: "Baloo 2", system-ui, sans-serif; font-weight: 700; font-size: 26px; letter-spacing: .04em; }
+  .start-hint { margin-top: 4px; font-size: 14px; color: #5b6a55; }
   .scene svg { width: 100%; height: auto; display: block; touch-action: none; }
 
   .tray {
@@ -286,6 +301,12 @@
           </div>
         </header>
 
+        <div id="start-overlay" role="button" tabindex="0" aria-label="Tik om te beginnen">
+          <div class="start-card">
+            <div class="start-title">OELEGOEF</div>
+            <div class="start-hint">Tik om Oelegoef wakker te maken</div>
+          </div>
+        </div>
         <div class="scene" id="scene">
           <svg viewBox="0 0 390 695" preserveAspectRatio="xMidYMin slice" role="img" aria-label="Het terras met zwembad, met Oelegoef erop">
             <defs>
@@ -1147,7 +1168,7 @@
     bowlToTray();
     setBars();
     status.textContent = "Nieuwe dag. Tellers op nul, de bal ligt weer op zijn plek, en hij heeft alweer trek.";
-    setTimeout(() => actHungry(++token, 6500, true), 1500);
+    setTimeout(() => actHungry(++token, 6500), 1500);
   }
 
   // ---- buttons ----
@@ -1340,7 +1361,16 @@
   bowlToTray();
   ballHome();
   lieDownAtRest();
-  // the day starts with a hungry dog: he gets up, goes to the chair and barks for his bowl
-  setTimeout(() => { if (token === 0) actHungry(++token, 6500, true); }, 1200);
+  // The day starts on the first tap (browsers allow sound only after a touch): the start screen
+  // unlocks the audio, then he gets up hungry, goes to the chair and barks for his bowl.
+  const startOverlay = $("start-overlay");
+  const startDay = () => {
+    if (startOverlay.classList.contains("hidden")) return;
+    unlockAudio();
+    startOverlay.classList.add("hidden");
+    setTimeout(() => { if (token === 0) actHungry(++token, 6500); }, 250);
+  };
+  startOverlay.addEventListener("click", startDay);
+  startOverlay.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") startDay(); });
 })();
 </script>
