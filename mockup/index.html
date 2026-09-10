@@ -642,6 +642,8 @@
       } catch { a.volume = 1; }
     });
     try { const c = ctx(); if (c) { const o = c.createOscillator(); const g = c.createGain(); g.gain.value = 0; o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime + 0.05); } } catch {}
+    // he was already barking silently: let the first bark be heard now, within the gesture
+    if (dogAt === "chair") setTimeout(bark, 150);
   }
   ["pointerdown", "touchstart", "touchend", "click", "keydown"].forEach((ev) => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
   /** A contented grumble: a low buzz with a purring pulse, a little pitch wobble, fading out. */
@@ -879,6 +881,7 @@
       await wait(2500, t); hush(); bowlToTray(); return;
     }
     status.textContent = `${NAME} ruikt het eten en komt eraan.`;
+    if (stats.hunger >= 40) { bark(); say("WOEF!"); if (!await wait(600, t)) return; hush(); }
     if (!await standUp(t)) return;
     const eatXY = [bx - 30, by];
     if (!await walkXY(dogXY, eatXY, t)) return;
